@@ -274,6 +274,9 @@ function updateCartDisplay() {
     if (cart.length === 0) {
         cartItems.innerHTML = '<p style="text-align: center; color: #a0aec0;">Koszyk jest pusty</p>';
         cartTotal.textContent = '0';
+        checkoutBtn.disabled = true;
+        checkoutBtn.style.opacity = '0.6';
+        checkoutBtn.style.cursor = 'not-allowed';
         return;
     }
     
@@ -301,6 +304,11 @@ function updateCartDisplay() {
     
     cartTotal.textContent = total;
     
+    // Włącz przycisk zamówienia
+    checkoutBtn.disabled = false;
+    checkoutBtn.style.opacity = '1';
+    checkoutBtn.style.cursor = 'pointer';
+    
     // Dodajemy event listener do przycisków usuwania
     document.querySelectorAll('.remove-item').forEach(button => {
         button.addEventListener('click', function() {
@@ -317,18 +325,32 @@ function removeFromCart(index) {
     updateCartDisplay();
 }
 
-// Zamówienie
+// Zamówienie - POPRAWIONE
 checkoutBtn.addEventListener('click', async function() {
+    console.log('🛒 Kliknięto przycisk złóż zamówienie');
+    
     if (cart.length === 0) {
+        console.log('❌ Koszyk jest pusty');
         alert('Koszyk jest pusty!');
         return;
     }
     
-    if (!checkAuth()) return;
+    console.log('📦 Zawartość koszyka:', cart);
+    
+    if (!checkAuth()) {
+        console.log('❌ Użytkownik nie zalogowany');
+        return;
+    }
+    
+    // Pokazuj loading
+    checkoutBtn.textContent = 'Składanie zamówienia...';
+    checkoutBtn.disabled = true;
     
     try {
         const token = localStorage.getItem('kurwiel-token');
         const total = cart.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+        
+        console.log('📤 Wysyłanie zamówienia do API...');
         
         const response = await fetch('https://kurwiel.onrender.com/api/orders/create', {
             method: 'POST',
@@ -342,20 +364,31 @@ checkoutBtn.addEventListener('click', async function() {
             })
         });
         
+        console.log('📨 Odpowiedź z API:', response.status);
+        
         const data = await response.json();
         
         if (response.ok) {
+            console.log('✅ Zamówienie złożone pomyślnie');
             alert(data.message);
             cart = [];
             updateCartCount();
             updateCartDisplay();
             cartModal.style.display = 'none';
+            
+            // Wyczyść localStorage
+            localStorage.removeItem('kurwiel-cart');
         } else {
+            console.log('❌ Błąd API:', data);
             alert(data.message || 'Błąd przy składaniu zamówienia!');
         }
     } catch (error) {
-        console.error('Order error:', error);
-        alert('Błąd połączenia z serwerem!');
+        console.error('❌ Order error:', error);
+        alert('Błąd połączenia z serwerem! Spróbuj ponownie.');
+    } finally {
+        // Przywróć przycisk
+        checkoutBtn.textContent = 'Złóż zamówienie';
+        checkoutBtn.disabled = false;
     }
 });
 
@@ -396,6 +429,9 @@ document.addEventListener('DOMContentLoaded', function() {
         cart = JSON.parse(savedCart);
         updateCartCount();
     }
+    
+    // Inicjalizuj przycisk zamówienia
+    updateCartDisplay();
 });
 
 // Zapisujemy koszyk do localStorage przy zmianach
