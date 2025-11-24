@@ -10,12 +10,9 @@ require('dotenv').config();
 // SendGrid
 const sgMail = require('@sendgrid/mail');
 
-// Konfiguruj SendGrid
 if (process.env.SENDGRID_API_KEY) {
     sgMail.setApiKey(process.env.SENDGRID_API_KEY);
     console.log('✅ SendGrid API Key skonfigurowany');
-} else {
-    console.log('❌ BRAK SendGrid API Key - emaile nie będą wysyłane');
 }
 
 const app = express();
@@ -44,16 +41,26 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(__dirname));
 
-// Database
+// Database configuration
 const dbConfig = {
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    ssl: { rejectUnauthorized: false },
+    ssl: {
+        rejectUnauthorized: false
+    },
     connectionLimit: 10
 };
+
+console.log('🔗 Konfiguracja bazy danych:', {
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
+    user: process.env.DB_USER,
+    database: process.env.DB_NAME,
+    hasPassword: !!process.env.DB_PASSWORD
+});
 
 const pool = mysql.createPool(dbConfig);
 
@@ -62,18 +69,9 @@ async function testConnection() {
     try {
         const connection = await pool.getConnection();
         console.log('✅ Połączono z bazą danych MySQL');
-        connection.release();
-    } catch (error) {
-        console.error('❌ Błąd połączenia z bazą danych:', error.message);
-    }
-}
-
-// Automatyczna inicjalizacja bazy
-async function initializeDatabaseOnStartup() {
-    try {
-        console.log('🔄 Sprawdzanie inicjalizacji bazy danych...');
         
-        const [tables] = await pool.execute(`
+        // Sprawdź czy tabela users istnieje
+        const [tables] = await connection.execute(`
             SELECT TABLE_NAME 
             FROM INFORMATION_SCHEMA.TABLES 
             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'
@@ -96,13 +94,15 @@ async function initializeDatabaseOnStartup() {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             `;
             
-            await pool.execute(createUsersTable);
+            await connection.execute(createUsersTable);
             console.log('✅ Tabela users została utworzona');
         } else {
             console.log('✅ Tabela users już istnieje');
         }
+        
+        connection.release();
     } catch (error) {
-        console.error('❌ Błąd podczas inicjalizacji bazy:', error);
+        console.error('❌ Błąd połączenia z bazą danych:', error.message);
     }
 }
 
@@ -117,6 +117,7 @@ const authenticateToken = (req, res, next) => {
 
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
         if (err) {
+            console.log('❌ Błąd weryfikacji tokena:', err.message);
             return res.status(403).json({ message: 'Nieprawidłowy token' });
         }
         req.user = user;
@@ -126,7 +127,6 @@ const authenticateToken = (req, res, next) => {
 
 // Funkcja do wysyłania emaila przez SendGrid
 async function sendOrderEmail(orderDetails) {
-    // Jeśli brak API Key, zwróć true (symuluj sukces)
     if (!process.env.SENDGRID_API_KEY) {
         console.log('⚠️ Brak SendGrid API Key - symulowanie wysłania emaila');
         return true;
@@ -186,9 +186,6 @@ async function sendOrderEmail(orderDetails) {
 
     } catch (error) {
         console.error('❌ Błąd SendGrid:', error.message);
-        if (error.response) {
-            console.error('SendGrid response:', error.response.body);
-        }
         return false;
     }
 }
@@ -341,25 +338,6 @@ app.post('/api/orders/create', authenticateToken, async (req, res) => {
     }
 });
 
-// Pobierz profil użytkownika
-app.get('/api/user/profile', authenticateToken, async (req, res) => {
-    try {
-        const [users] = await pool.execute(
-            'SELECT id, first_name, last_name, email, newsletter, created_at FROM users WHERE id = ?',
-            [req.user.userId]
-        );
-
-        if (users.length === 0) {
-            return res.status(404).json({ message: 'Użytkownik nie znaleziony' });
-        }
-
-        res.json(users[0]);
-    } catch (error) {
-        console.error('❌ Profile error:', error);
-        res.status(500).json({ message: 'Wewnętrzny błąd serwera' });
-    }
-});
-
 // Health check
 app.get('/api/health', async (req, res) => {
     try {
@@ -398,8 +376,8 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Serwer uruchomiony na porcie ${PORT}`);
     console.log(`🌐 Środowisko: ${process.env.NODE_ENV}`);
     console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'OK' : 'BRAK API KEY'}`);
+    console.log(`🔐 JWT Secret: ${process.env.JWT_SECRET ? 'OK' : 'BRAK'}`);
     await testConnection();
-    await initializeDatabaseOnStartup();
 });
 
 module.exports = app;
