@@ -1,13 +1,14 @@
 {
-  "name": "kurwiel-backend",
+  "name": "kurwiel-shop",
   "version": "1.0.0",
-  "description": "Backend dla sklepu Kurwiel",
-  "main": "server.js",
+  "description": "Sklep Kurwiel - liquidy do e-papierosów",
+  "main": "backend/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
-    "init-db": "node init-db.js",
-    "build": "echo 'No build step required for Node.js'"
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js",
+    "init-db": "node backend/init-db.js",
+    "build": "echo 'No build step required'",
+    "render-build": "npm install"
   },
   "dependencies": {
     "express": "^4.18.2",
