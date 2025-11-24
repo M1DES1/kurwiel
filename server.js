@@ -1,357 +1,417 @@
-const express = require('express');
-const mysql = require('mysql2/promise');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const cors = require('cors');
-const helmet = require('helmet');
-const path = require('path');
-require('dotenv').config();
+// Koszyk
+let cart = [];
+let cartCount = document.getElementById('cart-count');
+let cartModal = document.getElementById('cart-modal');
+let cartItems = document.getElementById('cart-items');
+let cartTotal = document.getElementById('cart-total');
+let checkoutBtn = document.getElementById('checkout');
 
-const app = express();
-
-// MIDDLEWARE CORS - POPRAWIONE
-app.use(cors({
-    origin: [
-        'https://kurwiel.work.gd',
-        'http://kurwiel.work.gd',
-        'https://kurwiel.onrender.com',
-        'http://kurwiel.onrender.com',
-        'http://localhost:3000',
-        'http://localhost:8000'
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
-
-// Obsługa preflight requests
-app.options('*', cors());
-
-app.use(helmet({
-    contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false
-}));
-
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Serve static files
-app.use(express.static(__dirname));
-
-// Database connection pool - POPRAWIONE
-const dbConfig = {
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    ssl: {
-        rejectUnauthorized: false
-    },
-    connectionLimit: 10
-};
-
-console.log('🔗 Konfiguracja bazy danych:', {
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    user: process.env.DB_USER,
-    database: process.env.DB_NAME,
-    hasPassword: !!process.env.DB_PASSWORD
-});
-
-const pool = mysql.createPool(dbConfig);
-
-// Test database connection
-async function testConnection() {
-    try {
-        const connection = await pool.getConnection();
-        console.log('✅ Połączono z bazą danych MySQL na Aiven');
-        
-        // Test zapytania
-        const [rows] = await connection.execute('SELECT 1 as test');
-        console.log('✅ Test zapytania do bazy: OK');
-        
-        connection.release();
-    } catch (error) {
-        console.error('❌ Błąd połączenia z bazą danych:', error.message);
-        console.error('Szczegóły błędu:', error);
-    }
-}
-
-// Automatyczna inicjalizacja bazy przy starcie
-async function initializeDatabaseOnStartup() {
-    try {
-        console.log('🔄 Sprawdzanie inicjalizacji bazy danych...');
-        
-        // Sprawdź czy tabela users istnieje
-        const [tables] = await pool.execute(`
-            SELECT TABLE_NAME 
-            FROM INFORMATION_SCHEMA.TABLES 
-            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'
-        `, [process.env.DB_NAME]);
-        
-        if (tables.length === 0) {
-            console.log('📦 Tabela users nie istnieje, tworzenie...');
-            
-            // Tworzenie tabeli users
-            const createUsersTable = `
-                CREATE TABLE users (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    first_name VARCHAR(100) NOT NULL,
-                    last_name VARCHAR(100) NOT NULL,
-                    email VARCHAR(255) UNIQUE NOT NULL,
-                    password VARCHAR(255) NOT NULL,
-                    newsletter BOOLEAN DEFAULT FALSE,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    INDEX idx_email (email)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-            `;
-            
-            await pool.execute(createUsersTable);
-            console.log('✅ Tabela users została utworzona');
-        } else {
-            console.log('✅ Tabela users już istnieje');
-            
-            // Sprawdź liczbę użytkowników
-            const [users] = await pool.execute('SELECT COUNT(*) as count FROM users');
-            console.log(`📊 Liczba użytkowników w bazie: ${users[0].count}`);
-        }
-    } catch (error) {
-        console.error('❌ Błąd podczas inicjalizacji bazy:', error);
-    }
-}
-
-// Middleware do weryfikacji tokena JWT
-const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
+// Sprawdź czy użytkownik jest zalogowany
+function checkAuth() {
+    const token = localStorage.getItem('kurwiel-token');
     if (!token) {
-        return res.status(401).json({ message: 'Token dostępu wymagany' });
+        alert('Musisz być zalogowany, aby dodawać produkty do koszyka!');
+        window.location.href = 'login.html';
+        return false;
     }
+    return true;
+}
 
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) {
-            return res.status(403).json({ message: 'Nieprawidłowy token' });
+// Aktualizuj nawigację dla zalogowanego użytkownika
+function updateNavigation() {
+    const userData = localStorage.getItem('kurwiel-user');
+    const token = localStorage.getItem('kurwiel-token');
+    
+    if (userData && token) {
+        try {
+            const user = JSON.parse(userData);
+            const nav = document.querySelector('nav ul');
+            
+            if (nav) {
+                // Znajdź przyciski logowania/rejestracji
+                const loginBtn = nav.querySelector('.login-btn');
+                const registerBtn = nav.querySelector('.register-btn');
+                
+                if (loginBtn && registerBtn) {
+                    // Zamień na przycisk profilu
+                    loginBtn.innerHTML = `👋 ${user.first_name}`;
+                    loginBtn.href = '#';
+                    loginBtn.classList.remove('login-btn');
+                    loginBtn.classList.add('profile-btn');
+                    loginBtn.onclick = (e) => {
+                        e.preventDefault();
+                        showUserInfo(user);
+                    };
+                    
+                    // Dodaj przycisk wylogowania
+                    const logoutBtn = document.createElement('li');
+                    logoutBtn.innerHTML = `<a href="#" class="logout-btn">Wyloguj</a>`;
+                    nav.appendChild(logoutBtn);
+                    
+                    // Usuń przycisk rejestracji
+                    registerBtn.parentElement.remove();
+                    
+                    // Obsługa wylogowania
+                    logoutBtn.querySelector('.logout-btn').addEventListener('click', function(e) {
+                        e.preventDefault();
+                        localStorage.removeItem('kurwiel-token');
+                        localStorage.removeItem('kurwiel-user');
+                        window.location.reload();
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Błąd podczas aktualizacji nawigacji:', error);
         }
-        req.user = user;
-        next();
+    }
+}
+
+// Pokazuj informacje o użytkowniku
+function showUserInfo(user) {
+    alert(`Witaj ${user.first_name} ${user.last_name}!\nEmail: ${user.email}`);
+}
+
+// Otwieranie/kontynuacja koszyka
+document.querySelector('.cart-icon').addEventListener('click', function() {
+    if (!checkAuth()) return;
+    updateCartDisplay();
+    cartModal.style.display = 'block';
+});
+
+// Zamykanie modala
+document.querySelector('.close').addEventListener('click', function() {
+    cartModal.style.display = 'none';
+});
+
+// Dodawanie do koszyka z wyborem rozmiaru
+document.querySelectorAll('.add-to-cart').forEach(button => {
+    button.addEventListener('click', function() {
+        if (!checkAuth()) return;
+        
+        const product = this.getAttribute('data-product');
+        const basePrice = parseInt(this.getAttribute('data-price'));
+        
+        // Tworzymy modal do wyboru rozmiaru
+        const sizeModal = createSizeModal(product, basePrice);
+        document.body.appendChild(sizeModal);
+        sizeModal.style.display = 'block';
     });
+});
+
+// Funkcja tworząca modal wyboru rozmiaru
+function createSizeModal(product, basePrice) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+            <span class="close-size-modal">&times;</span>
+            <h3>Wybierz rozmiar dla ${product}</h3>
+            <div class="size-options">
+                <div class="size-option" data-size="10ml" data-price="${basePrice}">
+                    <span>10ml</span>
+                    <span class="price">${basePrice}zł</span>
+                </div>
+                <div class="size-option" data-size="30ml" data-price="${basePrice * 3}">
+                    <span>30ml</span>
+                    <span class="price">${basePrice * 3}zł</span>
+                </div>
+                <div class="size-option" data-size="60ml" data-price="${basePrice * 6}">
+                    <span>60ml</span>
+                    <span class="price">${basePrice * 6}zł</span>
+                </div>
+            </div>
+            <button class="btn confirm-size">Dodaj do koszyka</button>
+        </div>
+    `;
+    
+    // Styl dla modal size
+    const style = document.createElement('style');
+    style.textContent = `
+        .size-options {
+            margin: 2rem 0;
+        }
+        .size-option {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            background: rgba(45, 55, 72, 0.5);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+            border: 2px solid transparent;
+        }
+        .size-option:hover {
+            background: rgba(45, 55, 72, 0.8);
+        }
+        .size-option.selected {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.2);
+        }
+        .size-option .price {
+            font-weight: bold;
+            color: #48bb78;
+        }
+        .close-size-modal {
+            color: #a0aec0;
+            float: right;
+            font-size: 2rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close-size-modal:hover {
+            color: #e2e8f0;
+        }
+    `;
+    document.head.appendChild(style);
+    
+    let selectedSize = null;
+    let selectedPrice = null;
+    
+    // Wybór rozmiaru
+    modal.querySelectorAll('.size-option').forEach(option => {
+        option.addEventListener('click', function() {
+            modal.querySelectorAll('.size-option').forEach(opt => opt.classList.remove('selected'));
+            this.classList.add('selected');
+            selectedSize = this.getAttribute('data-size');
+            selectedPrice = parseInt(this.getAttribute('data-price'));
+        });
+    });
+    
+    // Potwierdzenie wyboru
+    modal.querySelector('.confirm-size').addEventListener('click', function() {
+        if (selectedSize && selectedPrice) {
+            addToCart(product, selectedSize, selectedPrice);
+            modal.remove();
+            style.remove();
+        } else {
+            alert('Proszę wybrać rozmiar!');
+        }
+    });
+    
+    // Zamykanie modala
+    modal.querySelector('.close-size-modal').addEventListener('click', function() {
+        modal.remove();
+        style.remove();
+    });
+    
+    // Zamykanie po kliknięciu poza modalem
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            modal.remove();
+            style.remove();
+        }
+    });
+    
+    return modal;
+}
+
+// Funkcja dodająca produkt do koszyka
+function addToCart(product, size, price) {
+    // Sprawdzamy czy produkt już jest w koszyku
+    const existingItem = cart.find(item => item.name === product && item.size === size);
+    
+    if (existingItem) {
+        existingItem.quantity += 1;
+    } else {
+        cart.push({
+            name: product,
+            size: size,
+            quantity: 1,
+            price: price
+        });
+    }
+    
+    updateCartCount();
+    
+    // Powiadomienie
+    showNotification(`Dodano ${product} (${size}) do koszyka!`);
+}
+
+// Pokazanie powiadomienia
+function showNotification(message) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #48bb78, #38a169);
+        color: white;
+        padding: 1rem 2rem;
+        border-radius: 8px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        z-index: 1001;
+        font-weight: bold;
+        transform: translateX(400px);
+        transition: transform 0.3s ease;
+    `;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.transform = 'translateX(0)';
+    }, 100);
+    
+    setTimeout(() => {
+        notification.style.transform = 'translateX(400px)';
+        setTimeout(() => {
+            document.body.removeChild(notification);
+        }, 300);
+    }, 3000);
+}
+
+// Aktualizacja licznika koszyka
+function updateCartCount() {
+    const totalItems = cart.reduce((total, item) => total + item.quantity, 0);
+    cartCount.textContent = totalItems;
+}
+
+// Aktualizacja wyświetlania koszyka
+function updateCartDisplay() {
+    cartItems.innerHTML = '';
+    
+    if (cart.length === 0) {
+        cartItems.innerHTML = '<p style="text-align: center; color: #a0aec0;">Koszyk jest pusty</p>';
+        cartTotal.textContent = '0';
+        return;
+    }
+    
+    let total = 0;
+    
+    cart.forEach((item, index) => {
+        const itemTotal = item.quantity * item.price;
+        total += itemTotal;
+        
+        const cartItemElement = document.createElement('div');
+        cartItemElement.className = 'cart-item';
+        cartItemElement.innerHTML = `
+            <div>
+                <h4>${item.name}</h4>
+                <p>${item.size} • Ilość: ${item.quantity} x ${item.price}zł</p>
+            </div>
+            <div>
+                <strong>${itemTotal}zł</strong>
+                <button class="remove-item" data-index="${index}">Usuń</button>
+            </div>
+        `;
+        
+        cartItems.appendChild(cartItemElement);
+    });
+    
+    cartTotal.textContent = total;
+    
+    // Dodajemy event listener do przycisków usuwania
+    document.querySelectorAll('.remove-item').forEach(button => {
+        button.addEventListener('click', function() {
+            const index = parseInt(this.getAttribute('data-index'));
+            removeFromCart(index);
+        });
+    });
+}
+
+// Usuwanie z koszyka
+function removeFromCart(index) {
+    cart.splice(index, 1);
+    updateCartCount();
+    updateCartDisplay();
+}
+
+// Zamówienie
+checkoutBtn.addEventListener('click', async function() {
+    if (cart.length === 0) {
+        alert('Koszyk jest pusty!');
+        return;
+    }
+    
+    if (!checkAuth()) return;
+    
+    try {
+        const token = localStorage.getItem('kurwiel-token');
+        const total = cart.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+        
+        const response = await fetch('https://kurwiel.onrender.com/api/orders/create', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                items: cart,
+                total: total
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert(data.message);
+            cart = [];
+            updateCartCount();
+            updateCartDisplay();
+            cartModal.style.display = 'none';
+        } else {
+            alert(data.message || 'Błąd przy składaniu zamówienia!');
+        }
+    } catch (error) {
+        console.error('Order error:', error);
+        alert('Błąd połączenia z serwerem!');
+    }
+});
+
+// Zamykanie modala po kliknięciu poza nim
+window.addEventListener('click', function(event) {
+    if (event.target === cartModal) {
+        cartModal.style.display = 'none';
+    }
+});
+
+// Płynne przewijanie do sekcji
+document.querySelectorAll('nav a').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        if (this.getAttribute('href').startsWith('#')) {
+            e.preventDefault();
+            
+            const targetId = this.getAttribute('href');
+            const targetSection = document.querySelector(targetId);
+            
+            if (targetSection) {
+                window.scrollTo({
+                    top: targetSection.offsetTop - 100,
+                    behavior: 'smooth'
+                });
+            }
+        }
+    });
+});
+
+// Inicjalizacja
+document.addEventListener('DOMContentLoaded', function() {
+    updateCartCount();
+    updateNavigation();
+    
+    // Ładujemy koszyk z localStorage
+    const savedCart = localStorage.getItem('kurwiel-cart');
+    if (savedCart) {
+        cart = JSON.parse(savedCart);
+        updateCartCount();
+    }
+});
+
+// Zapisujemy koszyk do localStorage przy zmianach
+function saveCartToLocalStorage() {
+    localStorage.setItem('kurwiel-cart', JSON.stringify(cart));
+}
+
+// Modyfikujemy funkcje dodawania i usuwania z koszyka, aby zapisywały do localStorage
+const originalAddToCart = addToCart;
+addToCart = function(product, size, price) {
+    originalAddToCart(product, size, price);
+    saveCartToLocalStorage();
 };
 
-// Routes
-
-// Rejestracja użytkownika
-app.post('/api/auth/register', async (req, res) => {
-    try {
-        const { first_name, last_name, email, password, newsletter } = req.body;
-
-        console.log('📝 Rejestracja użytkownika:', { email, first_name, last_name });
-
-        // Walidacja
-        if (!first_name || !last_name || !email || !password) {
-            return res.status(400).json({ 
-                message: 'Wszystkie pola są wymagane' 
-            });
-        }
-
-        if (password.length < 8) {
-            return res.status(400).json({ 
-                message: 'Hasło musi mieć co najmniej 8 znaków' 
-            });
-        }
-
-        // Sprawdź czy użytkownik już istnieje
-        const [existingUsers] = await pool.execute(
-            'SELECT id FROM users WHERE email = ?',
-            [email.toLowerCase()]
-        );
-
-        if (existingUsers.length > 0) {
-            return res.status(409).json({ 
-                message: 'Użytkownik z tym emailem już istnieje' 
-            });
-        }
-
-        // Hashowanie hasła
-        const saltRounds = 12;
-        const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-        // Tworzenie użytkownika
-        const [result] = await pool.execute(
-            `INSERT INTO users (first_name, last_name, email, password, newsletter, created_at) 
-             VALUES (?, ?, ?, ?, ?, NOW())`,
-            [first_name, last_name, email.toLowerCase(), hashedPassword, newsletter || false]
-        );
-
-        console.log('✅ Użytkownik zarejestrowany:', result.insertId);
-
-        res.status(201).json({
-            message: 'Użytkownik został pomyślnie zarejestrowany',
-            userId: result.insertId
-        });
-
-    } catch (error) {
-        console.error('❌ Registration error:', error);
-        res.status(500).json({ 
-            message: 'Wewnętrzny błąd serwera' 
-        });
-    }
-});
-
-// Logowanie użytkownika
-app.post('/api/auth/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-
-        console.log('🔐 Logowanie użytkownika:', email);
-
-        if (!email || !password) {
-            return res.status(400).json({ 
-                message: 'Email i hasło są wymagane' 
-            });
-        }
-
-        // Znajdź użytkownika
-        const [users] = await pool.execute(
-            'SELECT * FROM users WHERE email = ?',
-            [email.toLowerCase()]
-        );
-
-        if (users.length === 0) {
-            console.log('❌ Użytkownik nie znaleziony:', email);
-            return res.status(401).json({ 
-                message: 'Nieprawidłowy email lub hasło' 
-            });
-        }
-
-        const user = users[0];
-
-        // Sprawdź hasło
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-        if (!isPasswordValid) {
-            console.log('❌ Nieprawidłowe hasło dla:', email);
-            return res.status(401).json({ 
-                message: 'Nieprawidłowy email lub hasło' 
-            });
-        }
-
-        // Generuj token JWT
-        const token = jwt.sign(
-            { 
-                userId: user.id, 
-                email: user.email 
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-
-        // Zwróć dane użytkownika (bez hasła)
-        const userResponse = {
-            id: user.id,
-            first_name: user.first_name,
-            last_name: user.last_name,
-            email: user.email,
-            newsletter: user.newsletter,
-            created_at: user.created_at
-        };
-
-        console.log('✅ Użytkownik zalogowany:', user.id);
-
-        res.json({
-            message: 'Logowanie udane',
-            token: token,
-            user: userResponse
-        });
-
-    } catch (error) {
-        console.error('❌ Login error:', error);
-        res.status(500).json({ 
-            message: 'Wewnętrzny błąd serwera' 
-        });
-    }
-});
-
-// Pobierz profil użytkownika
-app.get('/api/user/profile', authenticateToken, async (req, res) => {
-    try {
-        const [users] = await pool.execute(
-            'SELECT id, first_name, last_name, email, newsletter, created_at FROM users WHERE id = ?',
-            [req.user.userId]
-        );
-
-        if (users.length === 0) {
-            return res.status(404).json({ 
-                message: 'Użytkownik nie znaleziony' 
-            });
-        }
-
-        res.json(users[0]);
-    } catch (error) {
-        console.error('❌ Profile error:', error);
-        res.status(500).json({ 
-            message: 'Wewnętrzny błąd serwera' 
-        });
-    }
-});
-
-// Health check endpoint
-app.get('/api/health', async (req, res) => {
-    try {
-        await pool.execute('SELECT 1');
-        res.json({ 
-            status: 'OK', 
-            database: 'Connected',
-            timestamp: new Date().toISOString(),
-            environment: process.env.NODE_ENV
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            status: 'Error', 
-            database: 'Disconnected',
-            error: error.message,
-            timestamp: new Date().toISOString()
-        });
-    }
-});
-
-// Serve HTML files
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.get('/login', (req, res) => {
-    res.sendFile(path.join(__dirname, 'login.html'));
-});
-
-app.get('/register', (req, res) => {
-    res.sendFile(path.join(__dirname, 'register.html'));
-});
-
-// Obsługa błędów 404 dla API
-app.use('/api/*', (req, res) => {
-    res.status(404).json({ 
-        message: 'Endpoint nie znaleziony' 
-    });
-});
-
-// Global error handler
-app.use((error, req, res, next) => {
-    console.error('❌ Global error handler:', error);
-    res.status(500).json({ 
-        message: 'Wewnętrzny błąd serwera' 
-    });
-});
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, '0.0.0.0', async () => {
-    console.log(`🚀 Serwer uruchomiony na porcie ${PORT}`);
-    console.log(`🌐 Środowisko: ${process.env.NODE_ENV}`);
-    console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
-    await testConnection();
-    await initializeDatabaseOnStartup(); // AUTOMATYCZNA INICJALIZACJA BAZY
-});
-
-module.exports = app;
+const originalRemoveFromCart = removeFromCart;
+removeFromCart = function(index) {
+    originalRemoveFromCart(index);
+    saveCartToLocalStorage();
+};
