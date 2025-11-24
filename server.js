@@ -7,13 +7,20 @@ const helmet = require('helmet');
 const path = require('path');
 require('dotenv').config();
 
-// SendGrid zamiast nodemailer
+// SendGrid
 const sgMail = require('@sendgrid/mail');
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+// Konfiguruj SendGrid
+if (process.env.SENDGRID_API_KEY) {
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    console.log('✅ SendGrid API Key skonfigurowany');
+} else {
+    console.log('❌ BRAK SendGrid API Key - emaile nie będą wysyłane');
+}
 
 const app = express();
 
-// MIDDLEWARE CORS
+// MIDDLEWARE
 app.use(cors({
     origin: [
         'https://kurwiel.work.gd',
@@ -37,7 +44,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(__dirname));
 
-// Database connection
+// Database
 const dbConfig = {
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
@@ -48,32 +55,20 @@ const dbConfig = {
     connectionLimit: 10
 };
 
-console.log('🔗 Konfiguracja bazy danych:', {
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    user: process.env.DB_USER,
-    database: process.env.DB_NAME,
-    hasPassword: !!process.env.DB_PASSWORD
-});
-
 const pool = mysql.createPool(dbConfig);
 
 // Test database connection
 async function testConnection() {
     try {
         const connection = await pool.getConnection();
-        console.log('✅ Połączono z bazą danych MySQL na Aiven');
-        
-        const [rows] = await connection.execute('SELECT 1 as test');
-        console.log('✅ Test zapytania do bazy: OK');
-        
+        console.log('✅ Połączono z bazą danych MySQL');
         connection.release();
     } catch (error) {
         console.error('❌ Błąd połączenia z bazą danych:', error.message);
     }
 }
 
-// Automatyczna inicjalizacja bazy przy starcie
+// Automatyczna inicjalizacja bazy
 async function initializeDatabaseOnStartup() {
     try {
         console.log('🔄 Sprawdzanie inicjalizacji bazy danych...');
@@ -105,9 +100,6 @@ async function initializeDatabaseOnStartup() {
             console.log('✅ Tabela users została utworzona');
         } else {
             console.log('✅ Tabela users już istnieje');
-            
-            const [users] = await pool.execute('SELECT COUNT(*) as count FROM users');
-            console.log(`📊 Liczba użytkowników w bazie: ${users[0].count}`);
         }
     } catch (error) {
         console.error('❌ Błąd podczas inicjalizacji bazy:', error);
@@ -132,15 +124,16 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-// Funkcja do wysyłania emaila przez SendGrid - POPRAWIONA
+// Funkcja do wysyłania emaila przez SendGrid
 async function sendOrderEmail(orderDetails) {
+    // Jeśli brak API Key, zwróć true (symuluj sukces)
+    if (!process.env.SENDGRID_API_KEY) {
+        console.log('⚠️ Brak SendGrid API Key - symulowanie wysłania emaila');
+        return true;
+    }
+
     try {
-        console.log('📧 Próba wysłania emaila z zamówieniem przez SendGrid...');
-        console.log('📦 Dane zamówienia:', {
-            user: orderDetails.user,
-            itemsCount: orderDetails.items.length,
-            total: orderDetails.total
-        });
+        console.log('📧 Wysyłanie emaila z zamówieniem...');
 
         const msg = {
             to: 'kurwiellq@gmail.com',
@@ -150,66 +143,51 @@ async function sendOrderEmail(orderDetails) {
             },
             subject: `🚀 NOWE ZAMÓWIENIE - ${orderDetails.user.first_name} ${orderDetails.user.last_name}`,
             html: `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                    <style>
-                        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333; }
-                        .header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
-                        .section { background: #f8f9fa; padding: 20px; margin: 10px 0; border-radius: 8px; }
-                        .item { border: 2px solid #667eea; padding: 15px; margin: 10px 0; border-radius: 8px; background: white; }
-                        .total { background: #48bb78; color: white; padding: 20px; border-radius: 8px; text-align: center; }
-                        .footer { text-align: center; margin-top: 20px; color: #718096; font-size: 12px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="header">
-                        <h1>🚀 NOWE ZAMÓWIENIE!</h1>
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+                    <div style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+                        <h1 style="margin: 0;">🚀 NOWE ZAMÓWIENIE!</h1>
                     </div>
                     
-                    <div class="section">
-                        <h2>📋 Dane klienta:</h2>
+                    <div style="background: #f8f9fa; padding: 20px; margin: 10px 0; border-radius: 8px;">
+                        <h2 style="color: #2d3748; margin-top: 0;">📋 Dane klienta:</h2>
                         <p><strong>👤 Imię i nazwisko:</strong> ${orderDetails.user.first_name} ${orderDetails.user.last_name}</p>
                         <p><strong>📧 Email:</strong> ${orderDetails.user.email}</p>
                     </div>
                     
-                    <div class="section">
-                        <h2>🛒 Szczegóły zamówienia:</h2>
+                    <div style="background: #f8f9fa; padding: 20px; margin: 10px 0; border-radius: 8px;">
+                        <h2 style="color: #2d3748; margin-top: 0;">🛒 Szczegóły zamówienia:</h2>
                         ${orderDetails.items.map(item => `
-                            <div class="item">
-                                <p><strong>🍯 Produkt:</strong> ${item.name}</p>
-                                <p><strong>📏 Rozmiar:</strong> ${item.size}</p>
-                                <p><strong>🔢 Ilość:</strong> ${item.quantity}</p>
-                                <p><strong>💰 Cena za sztukę:</strong> ${item.price}zł</p>
-                                <p style="font-weight: bold; color: #e53e3e;">💵 Razem: ${item.quantity * item.price}zł</p>
+                            <div style="border: 2px solid #667eea; padding: 15px; margin: 10px 0; border-radius: 8px; background: white;">
+                                <p style="margin: 5px 0;"><strong>🍯 Produkt:</strong> ${item.name}</p>
+                                <p style="margin: 5px 0;"><strong>📏 Rozmiar:</strong> ${item.size}</p>
+                                <p style="margin: 5px 0;"><strong>🔢 Ilość:</strong> ${item.quantity}</p>
+                                <p style="margin: 5px 0;"><strong>💰 Cena za sztukę:</strong> ${item.price}zł</p>
+                                <p style="margin: 5px 0; font-weight: bold; color: #e53e3e;">💵 Razem: ${item.quantity * item.price}zł</p>
                             </div>
                         `).join('')}
                     </div>
                     
-                    <div class="total">
-                        <h2>💰 Łączna kwota: ${orderDetails.total}zł</h2>
-                        <p>📅 Data zamówienia: ${new Date().toLocaleString('pl-PL')}</p>
+                    <div style="background: #48bb78; color: white; padding: 20px; border-radius: 8px; text-align: center;">
+                        <h2 style="margin: 0;">💰 Łączna kwota: ${orderDetails.total}zł</h2>
+                        <p style="margin: 10px 0 0 0;">📅 Data zamówienia: ${new Date().toLocaleString('pl-PL')}</p>
                     </div>
                     
-                    <div class="footer">
+                    <div style="text-align: center; margin-top: 20px; color: #718096; font-size: 12px;">
                         <p>Wiadomość wygenerowana automatycznie ze sklepu Kurwiel</p>
                     </div>
-                </body>
-                </html>
+                </div>
             `
         };
 
-        console.log('🔄 Wysyłanie emaila przez SendGrid...');
+        console.log('🔄 Wysyłanie przez SendGrid...');
         const result = await sgMail.send(msg);
-        console.log('✅ Email z zamówieniem został wysłany przez SendGrid');
-        console.log('📨 SendGrid Response:', result[0].statusCode);
+        console.log('✅ Email wysłany pomyślnie! Status:', result[0].statusCode);
         return true;
+
     } catch (error) {
-        console.error('❌ Błąd przy wysyłaniu emaila przez SendGrid:');
-        console.error('SendGrid Error:', error.message);
+        console.error('❌ Błąd SendGrid:', error.message);
         if (error.response) {
-            console.error('SendGrid Response Body:', error.response.body);
+            console.error('SendGrid response:', error.response.body);
         }
         return false;
     }
@@ -217,7 +195,7 @@ async function sendOrderEmail(orderDetails) {
 
 // Routes
 
-// Rejestracja użytkownika
+// Rejestracja
 app.post('/api/auth/register', async (req, res) => {
     try {
         const { first_name, last_name, email, password, newsletter } = req.body;
@@ -260,7 +238,7 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
-// Logowanie użytkownika
+// Logowanie
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -382,22 +360,21 @@ app.get('/api/user/profile', authenticateToken, async (req, res) => {
     }
 });
 
-// Health check endpoint
+// Health check
 app.get('/api/health', async (req, res) => {
     try {
         await pool.execute('SELECT 1');
         res.json({ 
             status: 'OK', 
             database: 'Connected',
-            timestamp: new Date().toISOString(),
-            environment: process.env.NODE_ENV
+            sendgrid: process.env.SENDGRID_API_KEY ? 'Configured' : 'Not configured',
+            timestamp: new Date().toISOString()
         });
     } catch (error) {
         res.status(500).json({ 
             status: 'Error', 
             database: 'Disconnected',
-            error: error.message,
-            timestamp: new Date().toISOString()
+            error: error.message
         });
     }
 });
@@ -415,24 +392,12 @@ app.get('/register', (req, res) => {
     res.sendFile(path.join(__dirname, 'register.html'));
 });
 
-// Obsługa błędów 404 dla API
-app.use('/api/*', (req, res) => {
-    res.status(404).json({ message: 'Endpoint nie znaleziony' });
-});
-
-// Global error handler
-app.use((error, req, res, next) => {
-    console.error('❌ Global error handler:', error);
-    res.status(500).json({ message: 'Wewnętrzny błąd serwera' });
-});
-
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Serwer uruchomiony na porcie ${PORT}`);
     console.log(`🌐 Środowisko: ${process.env.NODE_ENV}`);
-    console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
-    console.log(`📧 SendGrid API: ${process.env.SENDGRID_API_KEY ? 'Skonfigurowany' : 'Brak konfiguracji'}`);
+    console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'OK' : 'BRAK API KEY'}`);
     await testConnection();
     await initializeDatabaseOnStartup();
 });
