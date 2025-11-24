@@ -54,4 +54,9 @@ async function initializeDatabase() {
     }
 }
 
-initializeDatabase();
+// Uruchom tylko jeśli wywołany bezpośrednio
+if (require.main === module) {
+    initializeDatabase();
+}
+
+module.exports = initializeDatabase;
