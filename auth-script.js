@@ -1,4 +1,5 @@
 // Skrypt dla stron logowania i rejestracji
+const API_BASE_URL = 'https://kurwiel-backend.onrender.com/api';
 
 document.addEventListener('DOMContentLoaded', function() {
     // Inicjalizacja dla strony logowania
@@ -13,40 +14,74 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Inicjalizacja przycisków social
     initSocialButtons();
+    
+    // Sprawdź status połączenia z backendem
+    checkBackendStatus();
 });
+
+// Sprawdź status backendu
+async function checkBackendStatus() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/health`);
+        const data = await response.json();
+        
+        if (data.status === 'OK') {
+            console.log('✅ Backend jest dostępny');
+        } else {
+            console.warn('⚠️ Backend ma problemy:', data);
+        }
+    } catch (error) {
+        console.error('❌ Backend nie jest dostępny:', error);
+    }
+}
 
 // Inicjalizacja formularza logowania
 function initLoginForm() {
     const loginForm = document.getElementById('loginForm');
     
-    loginForm.addEventListener('submit', function(e) {
+    loginForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         
         const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
-        const remember = document.querySelector('input[name="remember"]').checked;
         
         if (email && password) {
-            // Symulacja logowania
-            showLoading('Logowanie...');
-            
-            setTimeout(() => {
+            try {
+                showLoading('Logowanie...');
+                
+                const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
                 hideLoading();
                 
-                // Zapisujemy dane użytkownika do localStorage
-                const userData = {
-                    email: email,
-                    loggedIn: true,
-                    loginTime: new Date().toISOString()
-                };
-                localStorage.setItem('kurwiel-user', JSON.stringify(userData));
-                
-                showNotification('Logowanie udane! Przekierowujemy...', 'success');
-                
-                setTimeout(() => {
-                    window.location.href = 'index.html';
-                }, 1500);
-            }, 2000);
+                if (response.ok) {
+                    // Zapisujemy token do localStorage
+                    localStorage.setItem('kurwiel-token', data.token);
+                    localStorage.setItem('kurwiel-user', JSON.stringify(data.user));
+                    
+                    showNotification('Logowanie udane! Przekierowujemy...', 'success');
+                    
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 1500);
+                } else {
+                    showNotification(data.message || 'Błąd logowania!', 'error');
+                }
+            } catch (error) {
+                hideLoading();
+                showNotification('Błąd połączenia z serwerem! Sprawdź swoje połączenie internetowe.', 'error');
+                console.error('Login error:', error);
+            }
         } else {
             showNotification('Proszę wypełnić wszystkie pola!', 'error');
         }
@@ -85,7 +120,7 @@ function initRegisterForm() {
         });
     }
     
-    registerForm.addEventListener('submit', function(e) {
+    registerForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         
         const firstName = document.getElementById('firstName').value;
@@ -95,6 +130,7 @@ function initRegisterForm() {
         const confirmPassword = confirmPasswordInput.value;
         const ageCheck = document.querySelector('input[name="age"]').checked;
         const termsCheck = document.querySelector('input[name="terms"]').checked;
+        const newsletter = document.querySelector('input[name="newsletter"]').checked;
         
         // Walidacja
         let isValid = true;
@@ -118,30 +154,41 @@ function initRegisterForm() {
         }
         
         if (isValid) {
-            // Symulacja rejestracji
-            showLoading('Rejestracja...');
-            
-            setTimeout(() => {
+            try {
+                showLoading('Rejestracja...');
+                
+                const response = await fetch(`${API_BASE_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        first_name: firstName,
+                        last_name: lastName,
+                        email: email,
+                        password: password,
+                        newsletter: newsletter
+                    })
+                });
+                
+                const data = await response.json();
+                
                 hideLoading();
                 
-                // Zapisujemy dane użytkownika do localStorage
-                const userData = {
-                    firstName: firstName,
-                    lastName: lastName,
-                    email: email,
-                    phone: document.getElementById('phone').value,
-                    registered: true,
-                    registrationDate: new Date().toISOString(),
-                    newsletter: document.querySelector('input[name="newsletter"]').checked
-                };
-                localStorage.setItem('kurwiel-user', JSON.stringify(userData));
-                
-                showNotification('Rejestracja udana! Witamy w Kurwiel!', 'success');
-                
-                setTimeout(() => {
-                    window.location.href = 'index.html';
-                }, 1500);
-            }, 2000);
+                if (response.ok) {
+                    showNotification('Rejestracja udana! Witamy w Kurwiel!', 'success');
+                    
+                    setTimeout(() => {
+                        window.location.href = 'login.html';
+                    }, 1500);
+                } else {
+                    showNotification(data.message || 'Błąd rejestracji!', 'error');
+                }
+            } catch (error) {
+                hideLoading();
+                showNotification('Błąd połączenia z serwerem! Sprawdź swoje połączenie internetowe.', 'error');
+                console.error('Registration error:', error);
+            }
         } else {
             showNotification(errorMessage, 'error');
         }
@@ -218,7 +265,6 @@ function initSocialButtons() {
 
 // Pokazywanie powiadomień
 function showNotification(message, type = 'info') {
-    // Usuwamy istniejące powiadomienia
     const existingNotifications = document.querySelectorAll('.custom-notification');
     existingNotifications.forEach(notification => notification.remove());
     
@@ -239,7 +285,6 @@ function showNotification(message, type = 'info') {
         box-shadow: 0 5px 15px rgba(0,0,0,0.3);
     `;
     
-    // Kolory w zależności od typu
     const colors = {
         success: 'linear-gradient(135deg, #48bb78, #38a169)',
         error: 'linear-gradient(135deg, #e53e3e, #c53030)',
@@ -268,7 +313,6 @@ function showNotification(message, type = 'info') {
 
 // Pokazywanie ładowania
 function showLoading(message = 'Ładowanie...') {
-    // Usuwamy istniejące loadery
     const existingLoaders = document.querySelectorAll('.loading-overlay');
     existingLoaders.forEach(loader => loader.remove());
     
@@ -314,7 +358,6 @@ function showLoading(message = 'Ładowanie...') {
     text.style.color = '#e2e8f0';
     text.style.margin = '0';
     
-    // Dodajemy animację
     const style = document.createElement('style');
     style.textContent = `
         @keyframes spin {
@@ -329,7 +372,6 @@ function showLoading(message = 'Ładowanie...') {
     overlay.appendChild(loader);
     document.body.appendChild(overlay);
     
-    // Zapamiętujemy styl do późniejszego usunięcia
     overlay._styleElement = style;
 }
 
@@ -346,15 +388,58 @@ function hideLoading() {
 
 // Sprawdzamy czy użytkownik jest już zalogowany
 function checkUserAuth() {
+    const token = localStorage.getItem('kurwiel-token');
+    if (token) {
+        // Możemy zaktualizować UI - np. zmienić przyciski logowania na profil
+        console.log('Użytkownik jest zalogowany');
+        
+        // Aktualizuj nawigację jeśli użytkownik jest zalogowany
+        updateNavigationForLoggedInUser();
+    }
+}
+
+// Aktualizacja nawigacji dla zalogowanego użytkownika
+function updateNavigationForLoggedInUser() {
     const userData = localStorage.getItem('kurwiel-user');
     if (userData) {
-        const user = JSON.parse(userData);
-        if (user.loggedIn || user.registered) {
-            // Możemy zaktualizować UI - np. zmienić przyciski logowania na profil
-            console.log('Użytkownik jest zalogowany:', user.email);
+        try {
+            const user = JSON.parse(userData);
+            const nav = document.querySelector('nav ul');
+            
+            if (nav) {
+                // Znajdź przyciski logowania/rejestracji
+                const loginBtn = nav.querySelector('.login-btn');
+                const registerBtn = nav.querySelector('.register-btn');
+                
+                if (loginBtn && registerBtn) {
+                    // Zamień na przycisk profilu
+                    loginBtn.innerHTML = `👋 ${user.first_name}`;
+                    loginBtn.href = '#profile';
+                    loginBtn.classList.remove('login-btn');
+                    loginBtn.classList.add('profile-btn');
+                    
+                    // Dodaj przycisk wylogowania
+                    const logoutBtn = document.createElement('li');
+                    logoutBtn.innerHTML = `<a href="#" class="logout-btn">Wyloguj</a>`;
+                    nav.appendChild(logoutBtn);
+                    
+                    // Usuń przycisk rejestracji
+                    registerBtn.parentElement.remove();
+                    
+                    // Obsługa wylogowania
+                    logoutBtn.querySelector('.logout-btn').addEventListener('click', function(e) {
+                        e.preventDefault();
+                        localStorage.removeItem('kurwiel-token');
+                        localStorage.removeItem('kurwiel-user');
+                        window.location.reload();
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Błąd podczas aktualizacji nawigacji:', error);
         }
     }
 }
 
-// Inicjalizacja przy ładowaniu strony
+// Sprawdź autoryzację przy załadowaniu strony
 checkUserAuth();
