@@ -2,11 +2,11 @@
   "name": "kurwiel-shop",
   "version": "1.0.0",
   "description": "Sklep Kurwiel - liquidy do e-papierosów",
-  "main": "backend/server.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node backend/server.js",
-    "dev": "nodemon backend/server.js",
-    "init-db": "node backend/init-db.js",
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "init-db": "node init-db.js",
     "build": "echo 'No build step required'",
     "render-build": "npm install"
   },
