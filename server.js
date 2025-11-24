@@ -38,7 +38,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Serve static files
 app.use(express.static(__dirname));
 
-// Database connection pool - POPRAWIONE (usunięte nieprawidłowe opcje)
+// Database connection pool - POPRAWIONE
 const dbConfig = {
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
@@ -51,11 +51,12 @@ const dbConfig = {
     connectionLimit: 10
 };
 
-console.log('🔗 Łączenie z bazą danych:', {
+console.log('🔗 Konfiguracja bazy danych:', {
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
     user: process.env.DB_USER,
-    database: process.env.DB_NAME
+    database: process.env.DB_NAME,
+    hasPassword: !!process.env.DB_PASSWORD
 });
 
 const pool = mysql.createPool(dbConfig);
@@ -74,6 +75,50 @@ async function testConnection() {
     } catch (error) {
         console.error('❌ Błąd połączenia z bazą danych:', error.message);
         console.error('Szczegóły błędu:', error);
+    }
+}
+
+// Automatyczna inicjalizacja bazy przy starcie
+async function initializeDatabaseOnStartup() {
+    try {
+        console.log('🔄 Sprawdzanie inicjalizacji bazy danych...');
+        
+        // Sprawdź czy tabela users istnieje
+        const [tables] = await pool.execute(`
+            SELECT TABLE_NAME 
+            FROM INFORMATION_SCHEMA.TABLES 
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'
+        `, [process.env.DB_NAME]);
+        
+        if (tables.length === 0) {
+            console.log('📦 Tabela users nie istnieje, tworzenie...');
+            
+            // Tworzenie tabeli users
+            const createUsersTable = `
+                CREATE TABLE users (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    first_name VARCHAR(100) NOT NULL,
+                    last_name VARCHAR(100) NOT NULL,
+                    email VARCHAR(255) UNIQUE NOT NULL,
+                    password VARCHAR(255) NOT NULL,
+                    newsletter BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_email (email)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            `;
+            
+            await pool.execute(createUsersTable);
+            console.log('✅ Tabela users została utworzona');
+        } else {
+            console.log('✅ Tabela users już istnieje');
+            
+            // Sprawdź liczbę użytkowników
+            const [users] = await pool.execute('SELECT COUNT(*) as count FROM users');
+            console.log(`📊 Liczba użytkowników w bazie: ${users[0].count}`);
+        }
+    } catch (error) {
+        console.error('❌ Błąd podczas inicjalizacji bazy:', error);
     }
 }
 
@@ -306,6 +351,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🌐 Środowisko: ${process.env.NODE_ENV}`);
     console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
     await testConnection();
+    await initializeDatabaseOnStartup(); // AUTOMATYCZNA INICJALIZACJA BAZY
 });
 
 module.exports = app;
