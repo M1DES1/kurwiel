@@ -146,11 +146,11 @@ async function sendOrderEmail(orderDetails) {
     try {
         console.log('📧 Próba wysłania emaila z zamówieniem...');
         
-        // Prosty transporter bez uwierzytelniania (działa z większością serwerów SMTP)
-        const transporter = nodemailer.createTransporter({
+        // POPRAWIONE: createTransport zamiast createTransporter
+        const transporter = nodemailer.createTransport({
             host: 'smtp.gmail.com',
             port: 587,
-            secure: false, // true for 465, false for other ports
+            secure: false,
             auth: {
                 user: process.env.EMAIL_USER || 'kurwiellq@gmail.com',
                 pass: process.env.EMAIL_PASSWORD
@@ -158,6 +158,13 @@ async function sendOrderEmail(orderDetails) {
             tls: {
                 rejectUnauthorized: false
             }
+        });
+
+        console.log('🔧 Konfiguracja email:', {
+            host: 'smtp.gmail.com',
+            port: 587,
+            user: process.env.EMAIL_USER,
+            hasPassword: !!process.env.EMAIL_PASSWORD
         });
 
         // Test połączenia z SMTP
@@ -205,6 +212,7 @@ async function sendOrderEmail(orderDetails) {
 
         const info = await transporter.sendMail(mailOptions);
         console.log('✅ Email z zamówieniem został wysłany:', info.messageId);
+        console.log('📨 Email wysłany na:', 'kurwiellq@gmail.com');
         return true;
     } catch (error) {
         console.error('❌ Błąd przy wysyłaniu emaila:', error);
