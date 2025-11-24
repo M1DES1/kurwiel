@@ -1,5 +1,5 @@
 // Skrypt dla stron logowania i rejestracji
-const API_BASE_URL = 'https://kurwiel-backend.onrender.com/api';
+const API_BASE_URL = 'https://kurwiel.onrender.com/api';
 
 document.addEventListener('DOMContentLoaded', function() {
     // Inicjalizacja dla strony logowania
