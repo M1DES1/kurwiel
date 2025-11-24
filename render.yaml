@@ -3,7 +3,7 @@ services:
     name: kurwiel-backend
     env: node
     plan: free
-    buildCommand: npm run render-build
+    buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_ENV
