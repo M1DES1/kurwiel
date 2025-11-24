@@ -819,3 +819,38 @@ footer {
         font-size: 0.9rem;
     }
 }
+
+/* Style dla przycisku zamówienia */
+.checkout-btn {
+    width: 100%;
+    margin-top: 1rem;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    border: none;
+    padding: 1rem 2rem;
+    border-radius: 8px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.checkout-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.checkout-btn:disabled {
+    background: #a0aec0 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+    box-shadow: none !important;
+    opacity: 0.6;
+}
+
+/* Loading state */
+.checkout-btn.loading {
+    background: #a0aec0 !important;
+    cursor: wait !important;
+}
