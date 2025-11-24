@@ -9,21 +9,27 @@ require('dotenv').config();
 
 const app = express();
 
-// Middleware
-app.use(helmet({
-    contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false
-}));
-
+// MIDDLEWARE CORS - POPRAWIONE
 app.use(cors({
     origin: [
         'https://kurwiel.work.gd',
         'http://kurwiel.work.gd',
+        'https://kurwiel.onrender.com',
+        'http://kurwiel.onrender.com',
         'http://localhost:3000',
-        'http://localhost:8000',
-        'https://kurwiel-backend.onrender.com'
+        'http://localhost:8000'
     ],
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
+// Obsługa preflight requests
+app.options('*', cors());
+
+app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false
 }));
 
 app.use(express.json({ limit: '10mb' }));
@@ -32,7 +38,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Serve static files
 app.use(express.static(__dirname));
 
-// Database connection pool
+// Database connection pool - POPRAWIONE (usunięte nieprawidłowe opcje)
 const dbConfig = {
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
@@ -42,10 +48,7 @@ const dbConfig = {
     ssl: {
         rejectUnauthorized: false
     },
-    connectionLimit: 10,
-    acquireTimeout: 60000,
-    timeout: 60000,
-    reconnect: true
+    connectionLimit: 10
 };
 
 console.log('🔗 Łączenie z bazą danych:', {
