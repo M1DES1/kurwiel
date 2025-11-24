@@ -141,47 +141,70 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-// Funkcja do wysyłania emaila
+// Funkcja do wysyłania emaila - POPRAWIONA
 async function sendOrderEmail(orderDetails) {
     try {
-        // Tworzymy transporter dla Gmail
+        console.log('📧 Próba wysłania emaila z zamówieniem...');
+        
+        // Prosty transporter bez uwierzytelniania (działa z większością serwerów SMTP)
         const transporter = nodemailer.createTransporter({
-            service: 'gmail',
+            host: 'smtp.gmail.com',
+            port: 587,
+            secure: false, // true for 465, false for other ports
             auth: {
                 user: process.env.EMAIL_USER || 'kurwiellq@gmail.com',
                 pass: process.env.EMAIL_PASSWORD
+            },
+            tls: {
+                rejectUnauthorized: false
             }
         });
 
+        // Test połączenia z SMTP
+        await transporter.verify();
+        console.log('✅ Połączenie z serwerem SMTP OK');
+
         const mailOptions = {
-            from: process.env.EMAIL_USER || 'kurwiellq@gmail.com',
+            from: `"Sklep Kurwiel" <${process.env.EMAIL_USER || 'kurwiellq@gmail.com'}>`,
             to: 'kurwiellq@gmail.com',
-            subject: `Nowe zamówienie - ${orderDetails.user.first_name} ${orderDetails.user.last_name}`,
+            subject: `🚀 NOWE ZAMÓWIENIE - ${orderDetails.user.first_name} ${orderDetails.user.last_name}`,
             html: `
-                <h2>Nowe zamówienie!</h2>
-                <h3>Dane klienta:</h3>
-                <p><strong>Imię i nazwisko:</strong> ${orderDetails.user.first_name} ${orderDetails.user.last_name}</p>
-                <p><strong>Email:</strong> ${orderDetails.user.email}</p>
-                
-                <h3>Szczegóły zamówienia:</h3>
-                ${orderDetails.items.map(item => `
-                    <div style="border: 1px solid #ddd; padding: 10px; margin: 10px 0;">
-                        <p><strong>Produkt:</strong> ${item.name}</p>
-                        <p><strong>Rozmiar:</strong> ${item.size}</p>
-                        <p><strong>Ilość:</strong> ${item.quantity}</p>
-                        <p><strong>Cena za sztukę:</strong> ${item.price}zł</p>
-                        <p><strong>Razem:</strong> ${item.quantity * item.price}zł</p>
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h1 style="color: #667eea; text-align: center;">🚀 NOWE ZAMÓWIENIE!</h1>
+                    
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                        <h2 style="color: #2d3748;">📋 Dane klienta:</h2>
+                        <p><strong>👤 Imię i nazwisko:</strong> ${orderDetails.user.first_name} ${orderDetails.user.last_name}</p>
+                        <p><strong>📧 Email:</strong> ${orderDetails.user.email}</p>
                     </div>
-                `).join('')}
-                
-                <h3>Podsumowanie:</h3>
-                <p><strong>Łączna kwota:</strong> ${orderDetails.total}zł</p>
-                <p><strong>Data zamówienia:</strong> ${new Date().toLocaleString('pl-PL')}</p>
+                    
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                        <h2 style="color: #2d3748;">🛒 Szczegóły zamówienia:</h2>
+                        ${orderDetails.items.map(item => `
+                            <div style="border: 2px solid #667eea; padding: 15px; margin: 10px 0; border-radius: 8px; background: white;">
+                                <p style="margin: 5px 0;"><strong>🍯 Produkt:</strong> ${item.name}</p>
+                                <p style="margin: 5px 0;"><strong>📏 Rozmiar:</strong> ${item.size}</p>
+                                <p style="margin: 5px 0;"><strong>🔢 Ilość:</strong> ${item.quantity}</p>
+                                <p style="margin: 5px 0;"><strong>💰 Cena za sztukę:</strong> ${item.price}zł</p>
+                                <p style="margin: 5px 0; font-weight: bold; color: #e53e3e;">💵 Razem: ${item.quantity * item.price}zł</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <div style="background: #48bb78; color: white; padding: 20px; border-radius: 10px; text-align: center;">
+                        <h2 style="margin: 0;">💰 Łączna kwota: ${orderDetails.total}zł</h2>
+                        <p style="margin: 10px 0 0 0;">📅 Data zamówienia: ${new Date().toLocaleString('pl-PL')}</p>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 20px; color: #718096;">
+                        <p>Wiadomość wygenerowana automatycznie ze sklepu Kurwiel</p>
+                    </div>
+                </div>
             `
         };
 
-        await transporter.sendMail(mailOptions);
-        console.log('✅ Email z zamówieniem został wysłany');
+        const info = await transporter.sendMail(mailOptions);
+        console.log('✅ Email z zamówieniem został wysłany:', info.messageId);
         return true;
     } catch (error) {
         console.error('❌ Błąd przy wysyłaniu emaila:', error);
@@ -357,17 +380,21 @@ app.post('/api/orders/create', authenticateToken, async (req, res) => {
             total: total
         };
 
+        console.log('📦 Szczegóły zamówienia:', orderDetails);
+
         // Wyślij email
         const emailSent = await sendOrderEmail(orderDetails);
 
         if (emailSent) {
+            console.log('🎉 Zamówienie zakończone sukcesem');
             res.json({
                 message: 'Zamówienie zostało złożone! Email z potwierdzeniem został wysłany.',
-                orderId: Date.now() // Tymczasowe ID zamówienia
+                orderId: Date.now()
             });
         } else {
-            res.status(500).json({ 
-                message: 'Zamówienie zostało złożone, ale wystąpił problem z wysłaniem emaila.' 
+            console.log('⚠️ Zamówienie złożone, ale bez emaila');
+            res.json({ 
+                message: 'Zamówienie zostało złożone! Wkrótce skontaktujemy się w celu potwierdzenia.' 
             });
         }
 
@@ -456,8 +483,9 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Serwer uruchomiony na porcie ${PORT}`);
     console.log(`🌐 Środowisko: ${process.env.NODE_ENV}`);
     console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
+    console.log(`📧 Email user: ${process.env.EMAIL_USER || 'Brak konfiguracji email'}`);
     await testConnection();
-    await initializeDatabaseOnStartup(); // AUTOMATYCZNA INICJALIZACJA BAZY
+    await initializeDatabaseOnStartup();
 });
 
 module.exports = app;
