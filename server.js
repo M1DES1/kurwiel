@@ -7,13 +7,9 @@ const helmet = require('helmet');
 const path = require('path');
 require('dotenv').config();
 
-// SendGrid
-const sgMail = require('@sendgrid/mail');
-
-if (process.env.SENDGRID_API_KEY) {
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-    console.log('✅ SendGrid API Key skonfigurowany');
-}
+// Resend - nowy provider email
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const app = express();
 
@@ -58,8 +54,7 @@ console.log('🔗 Konfiguracja bazy danych:', {
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
     user: process.env.DB_USER,
-    database: process.env.DB_NAME,
-    hasPassword: !!process.env.DB_PASSWORD
+    database: process.env.DB_NAME
 });
 
 const pool = mysql.createPool(dbConfig);
@@ -69,9 +64,18 @@ async function testConnection() {
     try {
         const connection = await pool.getConnection();
         console.log('✅ Połączono z bazą danych MySQL');
+        connection.release();
+    } catch (error) {
+        console.error('❌ Błąd połączenia z bazą danych:', error.message);
+    }
+}
+
+// Automatyczna inicjalizacja bazy
+async function initializeDatabaseOnStartup() {
+    try {
+        console.log('🔄 Sprawdzanie inicjalizacji bazy danych...');
         
-        // Sprawdź czy tabela users istnieje
-        const [tables] = await connection.execute(`
+        const [tables] = await pool.execute(`
             SELECT TABLE_NAME 
             FROM INFORMATION_SCHEMA.TABLES 
             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'
@@ -94,15 +98,13 @@ async function testConnection() {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             `;
             
-            await connection.execute(createUsersTable);
+            await pool.execute(createUsersTable);
             console.log('✅ Tabela users została utworzona');
         } else {
             console.log('✅ Tabela users już istnieje');
         }
-        
-        connection.release();
     } catch (error) {
-        console.error('❌ Błąd połączenia z bazą danych:', error.message);
+        console.error('❌ Błąd podczas inicjalizacji bazy:', error);
     }
 }
 
@@ -125,27 +127,26 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-// Funkcja do wysyłania emaila przez SendGrid
+// Funkcja do wysyłania emaila przez Resend
 async function sendOrderEmail(orderDetails) {
-    if (!process.env.SENDGRID_API_KEY) {
-        console.log('⚠️ Brak SendGrid API Key - symulowanie wysłania emaila');
+    if (!process.env.RESEND_API_KEY) {
+        console.log('⚠️ Brak Resend API Key - symulowanie wysłania emaila');
         return true;
     }
 
     try {
-        console.log('📧 Wysyłanie emaila z zamówieniem...');
+        console.log('📧 Wysyłanie emaila z zamówieniem przez Resend...');
+        console.log('👤 Do: kurwiellq@gmail.com');
+        console.log('📦 Zamówienie:', orderDetails.items.length + ' produktów');
 
-        const msg = {
-            to: 'kurwiellq@gmail.com',
-            from: {
-                email: 'noreply@kurwiel.work.gd',
-                name: 'Sklep Kurwiel'
-            },
+        const { data, error } = await resend.emails.send({
+            from: 'Sklep Kurwiel <onboarding@resend.dev>',
+            to: ['kurwiellq@gmail.com'],
             subject: `🚀 NOWE ZAMÓWIENIE - ${orderDetails.user.first_name} ${orderDetails.user.last_name}`,
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
                     <div style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
-                        <h1 style="margin: 0;">🚀 NOWE ZAMÓWIENIE!</h1>
+                        <h1 style="margin: 0; font-size: 24px;">🚀 NOWE ZAMÓWIENIE!</h1>
                     </div>
                     
                     <div style="background: #f8f9fa; padding: 20px; margin: 10px 0; border-radius: 8px;">
@@ -168,7 +169,7 @@ async function sendOrderEmail(orderDetails) {
                     </div>
                     
                     <div style="background: #48bb78; color: white; padding: 20px; border-radius: 8px; text-align: center;">
-                        <h2 style="margin: 0;">💰 Łączna kwota: ${orderDetails.total}zł</h2>
+                        <h2 style="margin: 0; font-size: 20px;">💰 Łączna kwota: ${orderDetails.total}zł</h2>
                         <p style="margin: 10px 0 0 0;">📅 Data zamówienia: ${new Date().toLocaleString('pl-PL')}</p>
                     </div>
                     
@@ -177,15 +178,19 @@ async function sendOrderEmail(orderDetails) {
                     </div>
                 </div>
             `
-        };
+        });
 
-        console.log('🔄 Wysyłanie przez SendGrid...');
-        const result = await sgMail.send(msg);
-        console.log('✅ Email wysłany pomyślnie! Status:', result[0].statusCode);
+        if (error) {
+            console.error('❌ Błąd Resend:', error);
+            return false;
+        }
+
+        console.log('✅ Email wysłany pomyślnie przez Resend!');
+        console.log('📨 ID wiadomości:', data.id);
         return true;
 
     } catch (error) {
-        console.error('❌ Błąd SendGrid:', error.message);
+        console.error('❌ Błąd przy wysyłaniu emaila:', error);
         return false;
     }
 }
@@ -338,6 +343,25 @@ app.post('/api/orders/create', authenticateToken, async (req, res) => {
     }
 });
 
+// Pobierz profil użytkownika
+app.get('/api/user/profile', authenticateToken, async (req, res) => {
+    try {
+        const [users] = await pool.execute(
+            'SELECT id, first_name, last_name, email, newsletter, created_at FROM users WHERE id = ?',
+            [req.user.userId]
+        );
+
+        if (users.length === 0) {
+            return res.status(404).json({ message: 'Użytkownik nie znaleziony' });
+        }
+
+        res.json(users[0]);
+    } catch (error) {
+        console.error('❌ Profile error:', error);
+        res.status(500).json({ message: 'Wewnętrzny błąd serwera' });
+    }
+});
+
 // Health check
 app.get('/api/health', async (req, res) => {
     try {
@@ -345,7 +369,7 @@ app.get('/api/health', async (req, res) => {
         res.json({ 
             status: 'OK', 
             database: 'Connected',
-            sendgrid: process.env.SENDGRID_API_KEY ? 'Configured' : 'Not configured',
+            resend: process.env.RESEND_API_KEY ? 'Configured' : 'Not configured',
             timestamp: new Date().toISOString()
         });
     } catch (error) {
@@ -375,9 +399,9 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Serwer uruchomiony na porcie ${PORT}`);
     console.log(`🌐 Środowisko: ${process.env.NODE_ENV}`);
-    console.log(`📧 SendGrid: ${process.env.SENDGRID_API_KEY ? 'OK' : 'BRAK API KEY'}`);
-    console.log(`🔐 JWT Secret: ${process.env.JWT_SECRET ? 'OK' : 'BRAK'}`);
+    console.log(`📧 Resend: ${process.env.RESEND_API_KEY ? 'OK' : 'BRAK API KEY'}`);
     await testConnection();
+    await initializeDatabaseOnStartup();
 });
 
 module.exports = app;
