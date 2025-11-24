@@ -20,7 +20,8 @@ app.use(cors({
         'https://kurwiel.work.gd',
         'http://kurwiel.work.gd',
         'http://localhost:3000',
-        'http://localhost:8000'
+        'http://localhost:8000',
+        'https://kurwiel-backend.onrender.com'
     ],
     credentials: true
 }));
@@ -70,7 +71,6 @@ async function testConnection() {
     } catch (error) {
         console.error('❌ Błąd połączenia z bazą danych:', error.message);
         console.error('Szczegóły błędu:', error);
-        process.exit(1);
     }
 }
 
@@ -248,81 +248,6 @@ app.get('/api/user/profile', authenticateToken, async (req, res) => {
     }
 });
 
-// Aktualizuj profil użytkownika
-app.put('/api/user/profile', authenticateToken, async (req, res) => {
-    try {
-        const { first_name, last_name, newsletter } = req.body;
-        const userId = req.user.userId;
-
-        await pool.execute(
-            'UPDATE users SET first_name = ?, last_name = ?, newsletter = ?, updated_at = NOW() WHERE id = ?',
-            [first_name, last_name, newsletter, userId]
-        );
-
-        res.json({ 
-            message: 'Profil został zaktualizowany' 
-        });
-    } catch (error) {
-        console.error('❌ Update profile error:', error);
-        res.status(500).json({ 
-            message: 'Wewnętrzny błąd serwera' 
-        });
-    }
-});
-
-// Zmiana hasła
-app.put('/api/user/change-password', authenticateToken, async (req, res) => {
-    try {
-        const { currentPassword, newPassword } = req.body;
-        const userId = req.user.userId;
-
-        if (!currentPassword || !newPassword) {
-            return res.status(400).json({ 
-                message: 'Obecne i nowe hasło są wymagane' 
-            });
-        }
-
-        if (newPassword.length < 8) {
-            return res.status(400).json({ 
-                message: 'Nowe hasło musi mieć co najmniej 8 znaków' 
-            });
-        }
-
-        // Pobierz obecne hasło
-        const [users] = await pool.execute(
-            'SELECT password FROM users WHERE id = ?',
-            [userId]
-        );
-
-        const user = users[0];
-        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
-
-        if (!isCurrentPasswordValid) {
-            return res.status(401).json({ 
-                message: 'Obecne hasło jest nieprawidłowe' 
-            });
-        }
-
-        // Hash nowe hasło
-        const saltRounds = 12;
-        const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
-
-        await pool.execute(
-            'UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?',
-            [hashedNewPassword, userId]
-        );
-
-        res.json({ 
-            message: 'Hasło zostało zmienione' 
-        });
-    } catch (error) {
-        console.error('❌ Change password error:', error);
-        res.status(500).json({ 
-            message: 'Wewnętrzny błąd serwera' 
-        });
-    }
-});
-
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
     try {
@@ -343,10 +268,22 @@ app.get('/api/health', async (req, res) => {
     }
 });
 
-// Serve frontend
-app.get('*', (req, res) => {
+// Serve frontend - wszystkie pliki HTML
+app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
+
+app.get('/login', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/login.html'));
+});
+
+app.get('/register', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/register.html'));
+});
+
+// Serve static files
+app.use('/css', express.static(path.join(__dirname, '../frontend')));
+app.use('/js', express.static(path.join(__dirname, '../frontend')));
 
 // Obsługa błędów 404 dla API
 app.use('/api/*', (req, res) => {
@@ -365,7 +302,7 @@ app.use((error, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Serwer uruchomiony na porcie ${PORT}`);
     console.log(`🌐 Środowisko: ${process.env.NODE_ENV}`);
     console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
