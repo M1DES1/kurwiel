@@ -390,10 +390,7 @@ function hideLoading() {
 function checkUserAuth() {
     const token = localStorage.getItem('kurwiel-token');
     if (token) {
-        // Możemy zaktualizować UI - np. zmienić przyciski logowania na profil
         console.log('Użytkownik jest zalogowany');
-        
-        // Aktualizuj nawigację jeśli użytkownik jest zalogowany
         updateNavigationForLoggedInUser();
     }
 }
@@ -407,26 +404,21 @@ function updateNavigationForLoggedInUser() {
             const nav = document.querySelector('nav ul');
             
             if (nav) {
-                // Znajdź przyciski logowania/rejestracji
                 const loginBtn = nav.querySelector('.login-btn');
                 const registerBtn = nav.querySelector('.register-btn');
                 
                 if (loginBtn && registerBtn) {
-                    // Zamień na przycisk profilu
                     loginBtn.innerHTML = `👋 ${user.first_name}`;
                     loginBtn.href = '#profile';
                     loginBtn.classList.remove('login-btn');
                     loginBtn.classList.add('profile-btn');
                     
-                    // Dodaj przycisk wylogowania
                     const logoutBtn = document.createElement('li');
                     logoutBtn.innerHTML = `<a href="#" class="logout-btn">Wyloguj</a>`;
                     nav.appendChild(logoutBtn);
                     
-                    // Usuń przycisk rejestracji
                     registerBtn.parentElement.remove();
                     
-                    // Obsługa wylogowania
                     logoutBtn.querySelector('.logout-btn').addEventListener('click', function(e) {
                         e.preventDefault();
                         localStorage.removeItem('kurwiel-token');
