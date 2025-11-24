@@ -6,8 +6,74 @@ let cartItems = document.getElementById('cart-items');
 let cartTotal = document.getElementById('cart-total');
 let checkoutBtn = document.getElementById('checkout');
 
+// Sprawdź czy użytkownik jest zalogowany
+function checkAuth() {
+    const token = localStorage.getItem('kurwiel-token');
+    if (!token) {
+        alert('Musisz być zalogowany, aby dodawać produkty do koszyka!');
+        window.location.href = 'login.html';
+        return false;
+    }
+    return true;
+}
+
+// Aktualizuj nawigację dla zalogowanego użytkownika
+function updateNavigation() {
+    const userData = localStorage.getItem('kurwiel-user');
+    const token = localStorage.getItem('kurwiel-token');
+    
+    if (userData && token) {
+        try {
+            const user = JSON.parse(userData);
+            const nav = document.querySelector('nav ul');
+            
+            if (nav) {
+                // Znajdź przyciski logowania/rejestracji
+                const loginBtn = nav.querySelector('.login-btn');
+                const registerBtn = nav.querySelector('.register-btn');
+                
+                if (loginBtn && registerBtn) {
+                    // Zamień na przycisk profilu
+                    loginBtn.innerHTML = `👋 ${user.first_name}`;
+                    loginBtn.href = '#';
+                    loginBtn.classList.remove('login-btn');
+                    loginBtn.classList.add('profile-btn');
+                    loginBtn.onclick = (e) => {
+                        e.preventDefault();
+                        showUserInfo(user);
+                    };
+                    
+                    // Dodaj przycisk wylogowania
+                    const logoutBtn = document.createElement('li');
+                    logoutBtn.innerHTML = `<a href="#" class="logout-btn">Wyloguj</a>`;
+                    nav.appendChild(logoutBtn);
+                    
+                    // Usuń przycisk rejestracji
+                    registerBtn.parentElement.remove();
+                    
+                    // Obsługa wylogowania
+                    logoutBtn.querySelector('.logout-btn').addEventListener('click', function(e) {
+                        e.preventDefault();
+                        localStorage.removeItem('kurwiel-token');
+                        localStorage.removeItem('kurwiel-user');
+                        window.location.reload();
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Błąd podczas aktualizacji nawigacji:', error);
+        }
+    }
+}
+
+// Pokazuj informacje o użytkowniku
+function showUserInfo(user) {
+    alert(`Witaj ${user.first_name} ${user.last_name}!\nEmail: ${user.email}`);
+}
+
 // Otwieranie/kontynuacja koszyka
 document.querySelector('.cart-icon').addEventListener('click', function() {
+    if (!checkAuth()) return;
     updateCartDisplay();
     cartModal.style.display = 'block';
 });
@@ -20,6 +86,8 @@ document.querySelector('.close').addEventListener('click', function() {
 // Dodawanie do koszyka z wyborem rozmiaru
 document.querySelectorAll('.add-to-cart').forEach(button => {
     button.addEventListener('click', function() {
+        if (!checkAuth()) return;
+        
         const product = this.getAttribute('data-product');
         const basePrice = parseInt(this.getAttribute('data-price'));
         
@@ -250,24 +318,45 @@ function removeFromCart(index) {
 }
 
 // Zamówienie
-checkoutBtn.addEventListener('click', function() {
+checkoutBtn.addEventListener('click', async function() {
     if (cart.length === 0) {
         alert('Koszyk jest pusty!');
         return;
     }
     
-    const orderDetails = cart.map(item => 
-        `${item.name} (${item.size}) x${item.quantity} - ${item.quantity * item.price}zł`
-    ).join('\n');
+    if (!checkAuth()) return;
     
-    const total = cart.reduce((sum, item) => sum + (item.quantity * item.price), 0);
-    
-    alert(`Dziękujemy za złożenie zamówienia!\n\n${orderDetails}\n\nRAZEM: ${total}zł\n\nSkontaktujemy się z Tobą w celu potwierdzenia szczegółów.`);
-    
-    cart = [];
-    updateCartCount();
-    updateCartDisplay();
-    cartModal.style.display = 'none';
+    try {
+        const token = localStorage.getItem('kurwiel-token');
+        const total = cart.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+        
+        const response = await fetch('https://kurwiel.onrender.com/api/orders/create', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                items: cart,
+                total: total
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert(data.message);
+            cart = [];
+            updateCartCount();
+            updateCartDisplay();
+            cartModal.style.display = 'none';
+        } else {
+            alert(data.message || 'Błąd przy składaniu zamówienia!');
+        }
+    } catch (error) {
+        console.error('Order error:', error);
+        alert('Błąd połączenia z serwerem!');
+    }
 });
 
 // Zamykanie modala po kliknięciu poza nim
@@ -299,6 +388,7 @@ document.querySelectorAll('nav a').forEach(anchor => {
 // Inicjalizacja
 document.addEventListener('DOMContentLoaded', function() {
     updateCartCount();
+    updateNavigation();
     
     // Ładujemy koszyk z localStorage
     const savedCart = localStorage.getItem('kurwiel-cart');
