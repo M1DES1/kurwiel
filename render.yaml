@@ -3,38 +3,22 @@ services:
     name: kurwiel-backend
     env: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm run render-build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: DB_HOST
-        fromDatabase:
-          name: kurwiel-mysql
-          property: host
+        value: mysql-988fd8f-w0bise-a489.h.aivencloud.com
       - key: DB_PORT
-        fromDatabase:
-          name: kurwiel-mysql
-          property: port
+        value: 17464
       - key: DB_USER
-        fromDatabase:
-          name: kurwiel-mysql
-          property: user
+        value: avnadmin
       - key: DB_PASSWORD
-        fromDatabase:
-          name: kurwiel-mysql
-          property: password
+        fromSecret: aiven_db_password
       - key: DB_NAME
-        fromDatabase:
-          name: kurwiel-mysql
-          property: database
+        value: defaultdb
       - key: JWT_SECRET
-        generateValue: true
+        fromSecret: jwt_secret
       - key: FRONTEND_URL
         value: https://kurwiel.work.gd
-
-databases:
-  - name: kurwiel-mysql
-    plan: free
-    databaseName: defaultdb
-    user: avnadmin
