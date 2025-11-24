@@ -5,8 +5,11 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
-const nodemailer = require('nodemailer');
 require('dotenv').config();
+
+// SendGrid zamiast nodemailer
+const sgMail = require('@sendgrid/mail');
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const app = express();
 
@@ -45,16 +48,69 @@ const dbConfig = {
     connectionLimit: 10
 };
 
+console.log('🔗 Konfiguracja bazy danych:', {
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
+    user: process.env.DB_USER,
+    database: process.env.DB_NAME,
+    hasPassword: !!process.env.DB_PASSWORD
+});
+
 const pool = mysql.createPool(dbConfig);
 
 // Test database connection
 async function testConnection() {
     try {
         const connection = await pool.getConnection();
-        console.log('✅ Połączono z bazą danych MySQL');
+        console.log('✅ Połączono z bazą danych MySQL na Aiven');
+        
+        const [rows] = await connection.execute('SELECT 1 as test');
+        console.log('✅ Test zapytania do bazy: OK');
+        
         connection.release();
     } catch (error) {
         console.error('❌ Błąd połączenia z bazą danych:', error.message);
+    }
+}
+
+// Automatyczna inicjalizacja bazy przy starcie
+async function initializeDatabaseOnStartup() {
+    try {
+        console.log('🔄 Sprawdzanie inicjalizacji bazy danych...');
+        
+        const [tables] = await pool.execute(`
+            SELECT TABLE_NAME 
+            FROM INFORMATION_SCHEMA.TABLES 
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'
+        `, [process.env.DB_NAME]);
+        
+        if (tables.length === 0) {
+            console.log('📦 Tabela users nie istnieje, tworzenie...');
+            
+            const createUsersTable = `
+                CREATE TABLE users (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    first_name VARCHAR(100) NOT NULL,
+                    last_name VARCHAR(100) NOT NULL,
+                    email VARCHAR(255) UNIQUE NOT NULL,
+                    password VARCHAR(255) NOT NULL,
+                    newsletter BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_email (email)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            `;
+            
+            await pool.execute(createUsersTable);
+            console.log('✅ Tabela users została utworzona');
+        } else {
+            console.log('✅ Tabela users już istnieje');
+            
+            const [users] = await pool.execute('SELECT COUNT(*) as count FROM users');
+            console.log(`📊 Liczba użytkowników w bazie: ${users[0].count}`);
+        }
+    } catch (error) {
+        console.error('❌ Błąd podczas inicjalizacji bazy:', error);
     }
 }
 
@@ -76,67 +132,85 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-// Funkcja do wysyłania emaila - POPRAWIONA
+// Funkcja do wysyłania emaila przez SendGrid - POPRAWIONA
 async function sendOrderEmail(orderDetails) {
     try {
-        console.log('📧 Próba wysłania emaila z zamówieniem...');
-        
-        const transporter = nodemailer.createTransport({
-            host: 'smtp.gmail.com',
-            port: 587,
-            secure: false,
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASSWORD
-            },
-            tls: {
-                rejectUnauthorized: false
-            }
+        console.log('📧 Próba wysłania emaila z zamówieniem przez SendGrid...');
+        console.log('📦 Dane zamówienia:', {
+            user: orderDetails.user,
+            itemsCount: orderDetails.items.length,
+            total: orderDetails.total
         });
 
-        await transporter.verify();
-        console.log('✅ Połączenie z serwerem SMTP OK');
-
-        const mailOptions = {
-            from: `"Sklep Kurwiel" <${process.env.EMAIL_USER}>`,
+        const msg = {
             to: 'kurwiellq@gmail.com',
+            from: {
+                email: 'noreply@kurwiel.work.gd',
+                name: 'Sklep Kurwiel'
+            },
             subject: `🚀 NOWE ZAMÓWIENIE - ${orderDetails.user.first_name} ${orderDetails.user.last_name}`,
             html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h1 style="color: #667eea; text-align: center;">🚀 NOWE ZAMÓWIENIE!</h1>
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <style>
+                        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333; }
+                        .header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
+                        .section { background: #f8f9fa; padding: 20px; margin: 10px 0; border-radius: 8px; }
+                        .item { border: 2px solid #667eea; padding: 15px; margin: 10px 0; border-radius: 8px; background: white; }
+                        .total { background: #48bb78; color: white; padding: 20px; border-radius: 8px; text-align: center; }
+                        .footer { text-align: center; margin-top: 20px; color: #718096; font-size: 12px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>🚀 NOWE ZAMÓWIENIE!</h1>
+                    </div>
                     
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                        <h2 style="color: #2d3748;">📋 Dane klienta:</h2>
+                    <div class="section">
+                        <h2>📋 Dane klienta:</h2>
                         <p><strong>👤 Imię i nazwisko:</strong> ${orderDetails.user.first_name} ${orderDetails.user.last_name}</p>
                         <p><strong>📧 Email:</strong> ${orderDetails.user.email}</p>
                     </div>
                     
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                        <h2 style="color: #2d3748;">🛒 Szczegóły zamówienia:</h2>
+                    <div class="section">
+                        <h2>🛒 Szczegóły zamówienia:</h2>
                         ${orderDetails.items.map(item => `
-                            <div style="border: 2px solid #667eea; padding: 15px; margin: 10px 0; border-radius: 8px; background: white;">
-                                <p style="margin: 5px 0;"><strong>🍯 Produkt:</strong> ${item.name}</p>
-                                <p style="margin: 5px 0;"><strong>📏 Rozmiar:</strong> ${item.size}</p>
-                                <p style="margin: 5px 0;"><strong>🔢 Ilość:</strong> ${item.quantity}</p>
-                                <p style="margin: 5px 0;"><strong>💰 Cena za sztukę:</strong> ${item.price}zł</p>
-                                <p style="margin: 5px 0; font-weight: bold; color: #e53e3e;">💵 Razem: ${item.quantity * item.price}zł</p>
+                            <div class="item">
+                                <p><strong>🍯 Produkt:</strong> ${item.name}</p>
+                                <p><strong>📏 Rozmiar:</strong> ${item.size}</p>
+                                <p><strong>🔢 Ilość:</strong> ${item.quantity}</p>
+                                <p><strong>💰 Cena za sztukę:</strong> ${item.price}zł</p>
+                                <p style="font-weight: bold; color: #e53e3e;">💵 Razem: ${item.quantity * item.price}zł</p>
                             </div>
                         `).join('')}
                     </div>
                     
-                    <div style="background: #48bb78; color: white; padding: 20px; border-radius: 10px; text-align: center;">
-                        <h2 style="margin: 0;">💰 Łączna kwota: ${orderDetails.total}zł</h2>
-                        <p style="margin: 10px 0 0 0;">📅 Data zamówienia: ${new Date().toLocaleString('pl-PL')}</p>
+                    <div class="total">
+                        <h2>💰 Łączna kwota: ${orderDetails.total}zł</h2>
+                        <p>📅 Data zamówienia: ${new Date().toLocaleString('pl-PL')}</p>
                     </div>
-                </div>
+                    
+                    <div class="footer">
+                        <p>Wiadomość wygenerowana automatycznie ze sklepu Kurwiel</p>
+                    </div>
+                </body>
+                </html>
             `
         };
 
-        const info = await transporter.sendMail(mailOptions);
-        console.log('✅ Email z zamówieniem został wysłany:', info.messageId);
+        console.log('🔄 Wysyłanie emaila przez SendGrid...');
+        const result = await sgMail.send(msg);
+        console.log('✅ Email z zamówieniem został wysłany przez SendGrid');
+        console.log('📨 SendGrid Response:', result[0].statusCode);
         return true;
     } catch (error) {
-        console.error('❌ Błąd przy wysyłaniu emaila:', error);
+        console.error('❌ Błąd przy wysyłaniu emaila przez SendGrid:');
+        console.error('SendGrid Error:', error.message);
+        if (error.response) {
+            console.error('SendGrid Response Body:', error.response.body);
+        }
         return false;
     }
 }
@@ -147,6 +221,8 @@ async function sendOrderEmail(orderDetails) {
 app.post('/api/auth/register', async (req, res) => {
     try {
         const { first_name, last_name, email, password, newsletter } = req.body;
+
+        console.log('📝 Rejestracja użytkownika:', { email, first_name, last_name });
 
         if (!first_name || !last_name || !email || !password) {
             return res.status(400).json({ message: 'Wszystkie pola są wymagane' });
@@ -171,6 +247,8 @@ app.post('/api/auth/register', async (req, res) => {
             [first_name, last_name, email.toLowerCase(), hashedPassword, newsletter || false]
         );
 
+        console.log('✅ Użytkownik zarejestrowany:', result.insertId);
+
         res.status(201).json({
             message: 'Użytkownik został pomyślnie zarejestrowany',
             userId: result.insertId
@@ -187,6 +265,8 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
 
+        console.log('🔐 Logowanie użytkownika:', email);
+
         if (!email || !password) {
             return res.status(400).json({ message: 'Email i hasło są wymagane' });
         }
@@ -196,12 +276,14 @@ app.post('/api/auth/login', async (req, res) => {
         );
 
         if (users.length === 0) {
+            console.log('❌ Użytkownik nie znaleziony:', email);
             return res.status(401).json({ message: 'Nieprawidłowy email lub hasło' });
         }
 
         const user = users[0];
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
+            console.log('❌ Nieprawidłowe hasło dla:', email);
             return res.status(401).json({ message: 'Nieprawidłowy email lub hasło' });
         }
 
@@ -220,6 +302,8 @@ app.post('/api/auth/login', async (req, res) => {
             created_at: user.created_at
         };
 
+        console.log('✅ Użytkownik zalogowany:', user.id);
+
         res.json({
             message: 'Logowanie udane',
             token: token,
@@ -232,7 +316,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-// Składanie zamówienia - POPRAWIONE
+// Składanie zamówienia
 app.post('/api/orders/create', authenticateToken, async (req, res) => {
     try {
         const { items, total } = req.body;
@@ -261,7 +345,7 @@ app.post('/api/orders/create', authenticateToken, async (req, res) => {
         const emailSent = await sendOrderEmail(orderDetails);
 
         if (emailSent) {
-            console.log('🎉 Zamówienie zakończone sukcesem');
+            console.log('🎉 Zamówienie zakończone sukcesem - email wysłany');
             res.json({
                 message: 'Zamówienie zostało złożone! Email z potwierdzeniem został wysłany.',
                 orderId: Date.now()
@@ -279,6 +363,45 @@ app.post('/api/orders/create', authenticateToken, async (req, res) => {
     }
 });
 
+// Pobierz profil użytkownika
+app.get('/api/user/profile', authenticateToken, async (req, res) => {
+    try {
+        const [users] = await pool.execute(
+            'SELECT id, first_name, last_name, email, newsletter, created_at FROM users WHERE id = ?',
+            [req.user.userId]
+        );
+
+        if (users.length === 0) {
+            return res.status(404).json({ message: 'Użytkownik nie znaleziony' });
+        }
+
+        res.json(users[0]);
+    } catch (error) {
+        console.error('❌ Profile error:', error);
+        res.status(500).json({ message: 'Wewnętrzny błąd serwera' });
+    }
+});
+
+// Health check endpoint
+app.get('/api/health', async (req, res) => {
+    try {
+        await pool.execute('SELECT 1');
+        res.json({ 
+            status: 'OK', 
+            database: 'Connected',
+            timestamp: new Date().toISOString(),
+            environment: process.env.NODE_ENV
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            status: 'Error', 
+            database: 'Disconnected',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
 // Serve HTML files
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
@@ -292,11 +415,26 @@ app.get('/register', (req, res) => {
     res.sendFile(path.join(__dirname, 'register.html'));
 });
 
+// Obsługa błędów 404 dla API
+app.use('/api/*', (req, res) => {
+    res.status(404).json({ message: 'Endpoint nie znaleziony' });
+});
+
+// Global error handler
+app.use((error, req, res, next) => {
+    console.error('❌ Global error handler:', error);
+    res.status(500).json({ message: 'Wewnętrzny błąd serwera' });
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Serwer uruchomiony na porcie ${PORT}`);
+    console.log(`🌐 Środowisko: ${process.env.NODE_ENV}`);
+    console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
+    console.log(`📧 SendGrid API: ${process.env.SENDGRID_API_KEY ? 'Skonfigurowany' : 'Brak konfiguracji'}`);
     await testConnection();
+    await initializeDatabaseOnStartup();
 });
 
 module.exports = app;
