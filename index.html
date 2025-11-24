@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kurwiel - Liquidy do e-papierosów</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Ostrzeżenie -->
+    <div class="warning">
+        <p>⚠️ STRONA PRZEZNACZONA TYLKO DLA OSÓB PEŁNOLETNICH</p>
+    </div>
+
+    <!-- Nagłówek -->
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <h1 class="logo">KURWIEL</h1>
+                <p class="subtitle">Premium Liquidy do E-papierosów</p>
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="#home">Strona główna</a></li>
+                    <li><a href="#products">Liquidy</a></li>
+                    <li><a href="#about">O nas</a></li>
+                    <li><a href="login.html" class="login-btn">Zaloguj</a></li>
+                    <li><a href="register.html" class="register-btn">Zarejestruj</a></li>
+                </ul>
+            </nav>
+            <div class="cart-icon">
+                <span id="cart-count">0</span>
+                🛒
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h2>Premium Liquidy do E-papierosów</h2>
+                <p>Odkryj intensywne smaki stworzone dla prawdziwych koneserów wapowania</p>
+                <div class="hero-buttons">
+                    <a href="#products" class="btn">Zobacz liquidy</a>
+                    <a href="register.html" class="btn secondary">Dołącz do nas</a>
+                </div>
+            </div>
+            <div class="hero-image">
+                <div class="vape-device">🛸</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Produkty -->
+    <section id="products" class="products">
+        <div class="container">
+            <h2>Nasze Liquidy</h2>
+            <p class="section-subtitle">Wybierz swój ulubiony smak spośród naszych premium liquidów</p>
+            
+            <div class="nicotine-warning">
+                <p>⚠️ Wszystkie liquidy zawierają nikotynę. Palenie jest szkodliwe dla zdrowia.</p>
+            </div>
+
+            <div class="products-grid">
+                <!-- Produkt 1 -->
+                <div class="product-card">
+                    <div class="product-badge">Sweet Edition</div>
+                    <div class="product-image" style="background: linear-gradient(135deg, #ff6b6b, #ff8e8e);">KAMI</div>
+                    <h3>KAMI (sweet edition)</h3>
+                    <p class="flavor-description">Mieszanka świeżych truskawek i soczystej pitaji, które zostały delikatnie ochłodzone</p>
+                    <div class="prices">
+                        <div class="price-option">
+                            <span class="size">10ml</span>
+                            <div class="price-container">
+                                <span class="old-price">30zł</span>
+                                <span class="new-price">20zł</span>
+                            </div>
+                        </div>
+                        <div class="price-option">
+                            <span class="size">30ml</span>
+                            <div class="price-container">
+                                <span class="old-price">70zł</span>
+                                <span class="new-price">60zł</span>
+                            </div>
+                        </div>
+                        <div class="price-option">
+                            <span class="size">60ml</span>
+                            <div class="price-container">
+                                <span class="old-price">140zł</span>
+                                <span class="new-price">120zł</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="add-to-cart" data-product="KAMI (sweet edition)" data-price="20">
+                        Dodaj do koszyka
+                    </button>
+                </div>
+
+                <!-- Produkt 2 -->
+                <div class="product-card">
+                    <div class="product-image" style="background: linear-gradient(135deg, #8e44ad, #9b59b6);">BLACKCURRANT</div>
+                    <h3>BLACKCURRANT</h3>
+                    <p class="flavor-description">Intensywny aromat czarnej porzeczki</p>
+                    <div class="prices">
+                        <div class="price-option">
+                            <span class="size">10ml</span>
+                            <div class="price-container">
+                                <span class="old-price">30zł</span>
+                                <span class="new-price">20zł</span>
+                            </div>
+                        </div>
+                        <div class="price-option">
+                            <span class="size">30ml</span>
+                            <div class="price-container">
+                                <span class="old-price">70zł</span>
+                                <span class="new-price">60zł</span>
+                            </div>
+                        </div>
+                        <div class="price-option">
+                            <span class="size">60ml</span>
+                            <div class="price-container">
+                                <span class="old-price">140zł</span>
+                                <span class="new-price">120zł</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="add-to-cart" data-product="BLACKCURRANT" data-price="20">
+                        Dodaj do koszyka
+                    </button>
+                </div>
+
+                <!-- Produkt 3 -->
+                <div class="product-card">
+                    <div class="product-image" style="background: linear-gradient(135deg, #3498db, #2980b9);">BLACK 'N' BLUE</div>
+                    <h3>BLACK 'N' BLUE</h3>
+                    <p class="flavor-description">Połączenie jagód, winogron, anyżowych cukierków i mentolu</p>
+                    <div class="prices">
+                        <div class="price-option">
+                            <span class="size">10ml</span>
+                            <div class="price-container">
+                                <span class="old-price">30zł</span>
+                                <span class="new-price">20zł</span>
+                            </div>
+                        </div>
+                        <div class="price-option">
+                            <span class="size">30ml</span>
+                            <div class="price-container">
+                                <span class="old-price">70zł</span>
+                                <span class="new-price">60zł</span>
+                            </div>
+                        </div>
+                        <div class="price-option">
+                            <span class="size">60ml</span>
+                            <div class="price-container">
+                                <span class="old-price">140zł</span>
+                                <span class="new-price">120zł</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="add-to-cart" data-product="BLACK 'N' BLUE" data-price="20">
+                        Dodaj do koszyka
+                    </button>
+                </div>
+
+                <!-- Produkt 4 -->
+                <div class="product-card">
+                    <div class="product-badge">Sweet Edition</div>
+                    <div class="product-image" style="background: linear-gradient(135deg, #e74c3c, #c0392b);">RAGNAROK</div>
+                    <h3>RAGNAROK (sweet edition)</h3>
+                    <p class="flavor-description">Mieszanka soczystych truskawek, czerwonych porzeczek, malin i jeżyn, uzupełniona o chłodzik i słodzik</p>
+                    <div class="prices">
+                        <div class="price-option">
+                            <span class="size">10ml</span>
+                            <div class="price-container">
+                                <span class="old-price">30zł</span>
+                                <span class="new-price">20zł</span>
+                            </div>
+                        </div>
+                        <div class="price-option">
+                            <span class="size">30ml</span>
+                            <div class="price-container">
+                                <span class="old-price">70zł</span>
+                                <span class="new-price">60zł</span>
+                            </div>
+                        </div>
+                        <div class="price-option">
+                            <span class="size">60ml</span>
+                            <div class="price-container">
+                                <span class="old-price">140zł</span>
+                                <span class="new-price">120zł</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="add-to-cart" data-product="RAGNAROK (sweet edition)" data-price="20">
+                        Dodaj do koszyka
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- O nas -->
+    <section id="about" class="about">
+        <div class="container">
+            <h2>O Kurwiel</h2>
+            <div class="about-content">
+                <div class="about-text">
+                    <p>Jesteśmy pasjonatami wapowania, którzy postanowili stworzyć wyjątkowe liquidy dla wymagających użytkowników e-papierosów.</p>
+                    <p>Nasze receptury to połączenie najlepszych składników i wieloletniego doświadczenia w branży.</p>
+                    <div class="features">
+                        <div class="feature">
+                            <span>⭐</span>
+                            <p>Premium składniki</p>
+                        </div>
+                        <div class="feature">
+                            <span>⚡</span>
+                            <p>Intensywne smaki</p>
+                        </div>
+                        <div class="feature">
+                            <span>🔒</span>
+                            <p>Gwarancja jakości</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Koszyk -->
+    <div id="cart-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>🛒 Twój koszyk</h2>
+            <div id="cart-items"></div>
+            <div class="cart-total">
+                <strong>Razem: <span id="cart-total">0</span> zł</strong>
+            </div>
+            <button id="checkout" class="btn checkout-btn">Złóż zamówienie</button>
+        </div>
+    </div>
+
+    <!-- Stopka -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-warning">
+                    <p>⚠️ OSTRZEŻENIE: Produkt przeznaczony wyłącznie dla osób pełnoletnich. Zawiera nikotynę, która jest substancją silnie uzależniającą. Palenie jest szkodliwe dla zdrowia.</p>
+                </div>
+                <p>&copy; 2023 KURWIEL. Wszelkie prawa zastrzeżone.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
