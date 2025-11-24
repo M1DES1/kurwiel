@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: kurwiel-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_HOST
+        fromDatabase:
+          name: kurwiel-mysql
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: kurwiel-mysql
+          property: port
+      - key: DB_USER
+        fromDatabase:
+          name: kurwiel-mysql
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: kurwiel-mysql
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: kurwiel-mysql
+          property: database
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        value: https://kurwiel.work.gd
+
+databases:
+  - name: kurwiel-mysql
+    plan: free
+    databaseName: defaultdb
+    user: avnadmin
