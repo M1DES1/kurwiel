@@ -43,6 +43,13 @@ function updateNavigation() {
                         showUserInfo(user);
                     };
                     
+                    // Dodaj przycisk panelu admina jeśli użytkownik jest adminem
+                    if (user.role === 'admin') {
+                        const adminBtn = document.createElement('li');
+                        adminBtn.innerHTML = `<a href="admin.html" class="admin-btn">👑 Admin</a>`;
+                        nav.insertBefore(adminBtn, loginBtn.nextSibling);
+                    }
+                    
                     // Dodaj przycisk wylogowania
                     const logoutBtn = document.createElement('li');
                     logoutBtn.innerHTML = `<a href="#" class="logout-btn">Wyloguj</a>`;
@@ -68,7 +75,13 @@ function updateNavigation() {
 
 // Pokazuj informacje o użytkowniku
 function showUserInfo(user) {
-    alert(`Witaj ${user.first_name} ${user.last_name}!\nEmail: ${user.email}`);
+    let info = `Witaj ${user.first_name} ${user.last_name}!\nEmail: ${user.email}`;
+    
+    if (user.role === 'admin') {
+        info += '\n👑 Rola: Administrator';
+    }
+    
+    alert(info);
 }
 
 // Otwieranie/kontynuacja koszyka
@@ -342,6 +355,13 @@ checkoutBtn.addEventListener('click', async function() {
         return;
     }
     
+    // Sprawdź czy użytkownik nie jest zbanowany
+    const user = JSON.parse(localStorage.getItem('kurwiel-user'));
+    if (user.is_banned) {
+        alert('❌ Twoje konto zostało zablokowane. Nie możesz składać zamówień.');
+        return;
+    }
+    
     // Pokazuj loading
     checkoutBtn.textContent = 'Składanie zamówienia...';
     checkoutBtn.disabled = true;
@@ -418,6 +438,39 @@ document.querySelectorAll('nav a').forEach(anchor => {
     });
 });
 
+// Sprawdź status użytkownika (czy nie jest zbanowany)
+async function checkUserStatus() {
+    const token = localStorage.getItem('kurwiel-token');
+    const user = localStorage.getItem('kurwiel-user');
+    
+    if (token && user) {
+        try {
+            const userData = JSON.parse(user);
+            
+            // Sprawdź aktualny status użytkownika
+            const response = await fetch('https://kurwiel.onrender.com/api/user/profile', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            if (response.ok) {
+                const currentUser = await response.json();
+                
+                // Jeśli użytkownik jest zbanowany, wyloguj go
+                if (currentUser.is_banned) {
+                    alert('❌ Twoje konto zostało zablokowane.');
+                    localStorage.removeItem('kurwiel-token');
+                    localStorage.removeItem('kurwiel-user');
+                    window.location.reload();
+                }
+            }
+        } catch (error) {
+            console.error('Błąd sprawdzania statusu użytkownika:', error);
+        }
+    }
+}
+
 // Inicjalizacja
 document.addEventListener('DOMContentLoaded', function() {
     updateCartCount();
@@ -432,6 +485,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Inicjalizuj przycisk zamówienia
     updateCartDisplay();
+    
+    // Sprawdź status użytkownika
+    checkUserStatus();
+    
+    // Sprawdzaj status użytkownika co 30 sekund
+    setInterval(checkUserStatus, 30000);
 });
 
 // Zapisujemy koszyk do localStorage przy zmianach
