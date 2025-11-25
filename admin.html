@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Administratora - Kurwiel</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .admin-header {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 2rem;
+            border-radius: 15px;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: #1a1f2e;
+            padding: 1.5rem;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid #2d3748;
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+        
+        .users-table {
+            background: #1a1f2e;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #2d3748;
+        }
+        
+        .users-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .users-table th,
+        .users-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #2d3748;
+        }
+        
+        .users-table th {
+            background: #2d3748;
+            color: #e2e8f0;
+            font-weight: 600;
+        }
+        
+        .users-table tr:hover {
+            background: #2d3748;
+        }
+        
+        .status-online {
+            color: #48bb78;
+            font-weight: bold;
+        }
+        
+        .status-offline {
+            color: #a0aec0;
+        }
+        
+        .role-admin {
+            background: #805ad5;
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        
+        .role-user {
+            background: #4a5568;
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+        
+        .banned-true {
+            background: #e53e3e;
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        
+        .banned-false {
+            background: #48bb78;
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+        
+        .action-btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            margin: 0.2rem;
+            transition: all 0.3s;
+        }
+        
+        .ban-btn {
+            background: #ed8936;
+            color: white;
+        }
+        
+        .unban-btn {
+            background: #48bb78;
+            color: white;
+        }
+        
+        .delete-btn {
+            background: #e53e3e;
+            color: white;
+        }
+        
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        .refresh-btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Ostrzeżenie -->
+    <div class="warning">
+        <p>⚠️ PANEL ADMINISTRATORA - TYLKO DLA UPRAWNIONYCH OSÓB</p>
+    </div>
+
+    <!-- Nagłówek -->
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <a href="index.html" style="text-decoration: none;">
+                    <h1 class="logo">KURWIEL</h1>
+                </a>
+                <p class="subtitle">Panel Administratora</p>
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Strona główna</a></li>
+                    <li><a href="#" id="refreshUsers">🔄 Odśwież</a></li>
+                    <li><a href="#" id="logoutBtn">🚪 Wyloguj</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Panel administratora -->
+    <section class="admin-section">
+        <div class="admin-container">
+            <div class="admin-header">
+                <h1>👑 Panel Administratora</h1>
+                <p>Zarządzanie użytkownikami systemu</p>
+            </div>
+
+            <button class="refresh-btn" id="refreshBtn">
+                🔄 Odśwież listę użytkowników
+            </button>
+
+            <div class="stats-grid" id="statsGrid">
+                <!-- Statystyki będą wczytywane dynamicznie -->
+            </div>
+
+            <div class="users-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Imię i nazwisko</th>
+                            <th>Email</th>
+                            <th>Rola</th>
+                            <th>Status</th>
+                            <th>Online</th>
+                            <th>Data rejestracji</th>
+                            <th>Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        <!-- Dane użytkowników będą wczytywane dynamicznie -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stopka -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-warning">
+                    <p>⚠️ OSTRZEŻENIE: Produkt przeznaczony wyłącznie dla osób pełnoletnich. Zawiera nikotynę, która jest substancją silnie uzależniającą. Palenie jest szkodliwe dla zdrowia.</p>
+                </div>
+                <p>&copy; 2024 KURWIEL. Wszelkie prawa zastrzeżone.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="admin-script.js"></script>
+    <script src="password-protection.js"></script>
+</body>
+</html>
