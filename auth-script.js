@@ -435,3 +435,4 @@ function updateNavigationForLoggedInUser() {
 
 // Sprawdź autoryzację przy załadowaniu strony
 checkUserAuth();
+
