@@ -70,6 +70,27 @@ async function testConnection() {
     }
 }
 
+// Funkcja do tworzenia konta administratora
+async function createAdminUser() {
+    try {
+        const hashedPassword = await bcrypt.hash('pracownikmaka2137', 12);
+        
+        await pool.execute(
+            `INSERT INTO users (first_name, last_name, email, password, role, newsletter, created_at) 
+             VALUES (?, ?, ?, ?, 'admin', FALSE, NOW())`,
+            ['kurwisko', 'admin', 'kurwiellq@gmail.com', hashedPassword]
+        );
+        
+        console.log('✅ Konto administratora utworzone: kurwiellq@gmail.com');
+    } catch (error) {
+        if (error.code === 'ER_DUP_ENTRY') {
+            console.log('ℹ️ Konto administratora już istnieje');
+        } else {
+            console.error('❌ Błąd tworzenia konta administratora:', error);
+        }
+    }
+}
+
 // Automatyczna inicjalizacja bazy
 async function initializeDatabaseOnStartup() {
     try {
@@ -91,17 +112,39 @@ async function initializeDatabaseOnStartup() {
                     last_name VARCHAR(100) NOT NULL,
                     email VARCHAR(255) UNIQUE NOT NULL,
                     password VARCHAR(255) NOT NULL,
+                    role ENUM('user', 'admin') DEFAULT 'user',
+                    is_banned BOOLEAN DEFAULT FALSE,
+                    last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     newsletter BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    INDEX idx_email (email)
+                    INDEX idx_email (email),
+                    INDEX idx_role (role),
+                    INDEX idx_banned (is_banned)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             `;
             
             await pool.execute(createUsersTable);
             console.log('✅ Tabela users została utworzona');
+            
+            // Utwórz konto administratora
+            await createAdminUser();
         } else {
             console.log('✅ Tabela users już istnieje');
+            
+            // Sprawdź czy kolumna role istnieje, jeśli nie - dodaj
+            try {
+                await pool.execute('SELECT role FROM users LIMIT 1');
+            } catch (error) {
+                console.log('🔄 Dodawanie kolumn administracyjnych do tabeli users...');
+                await pool.execute('ALTER TABLE users ADD COLUMN role ENUM("user", "admin") DEFAULT "user"');
+                await pool.execute('ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT FALSE');
+                await pool.execute('ALTER TABLE users ADD COLUMN last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+                console.log('✅ Kolumny dodane pomyślnie');
+                
+                // Utwórz konto administratora
+                await createAdminUser();
+            }
         }
     } catch (error) {
         console.error('❌ Błąd podczas inicjalizacji bazy:', error);
@@ -125,6 +168,36 @@ const authenticateToken = (req, res, next) => {
         req.user = user;
         next();
     });
+};
+
+// Middleware do sprawdzania uprawnień administratora
+const requireAdmin = async (req, res, next) => {
+    try {
+        const userId = req.user.userId;
+        
+        const [users] = await pool.execute('SELECT role, is_banned FROM users WHERE id = ?', [userId]);
+        
+        if (users.length === 0 || users[0].role !== 'admin' || users[0].is_banned) {
+            return res.status(403).json({ message: 'Brak uprawnień administratora' });
+        }
+        
+        next();
+    } catch (error) {
+        console.error('Admin check error:', error);
+        res.status(500).json({ message: 'Błąd serwera' });
+    }
+};
+
+// Aktualizuj czas ostatniej aktywności użytkownika
+const updateUserActivity = async (userId) => {
+    try {
+        await pool.execute(
+            'UPDATE users SET last_active = NOW() WHERE id = ?',
+            [userId]
+        );
+    } catch (error) {
+        console.error('Error updating user activity:', error);
+    }
 };
 
 // Funkcja do wysyłania emaila przez Resend
@@ -261,11 +334,20 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
         const user = users[0];
+        
+        // Sprawdź czy użytkownik jest zbanowany
+        if (user.is_banned) {
+            return res.status(403).json({ message: 'Twoje konto zostało zablokowane' });
+        }
+
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
             console.log('❌ Nieprawidłowe hasło dla:', email);
             return res.status(401).json({ message: 'Nieprawidłowy email lub hasło' });
         }
+
+        // Aktualizuj czas aktywności
+        await updateUserActivity(user.id);
 
         const token = jwt.sign(
             { userId: user.id, email: user.email },
@@ -278,11 +360,12 @@ app.post('/api/auth/login', async (req, res) => {
             first_name: user.first_name,
             last_name: user.last_name,
             email: user.email,
+            role: user.role,
             newsletter: user.newsletter,
             created_at: user.created_at
         };
 
-        console.log('✅ Użytkownik zalogowany:', user.id);
+        console.log('✅ Użytkownik zalogowany:', user.id, 'Rola:', user.role);
 
         res.json({
             message: 'Logowanie udane',
@@ -303,6 +386,12 @@ app.post('/api/orders/create', authenticateToken, async (req, res) => {
         const userId = req.user.userId;
 
         console.log('🛒 Składanie zamówienia:', { userId, items, total });
+
+        // Sprawdź czy użytkownik jest zbanowany
+        const [userCheck] = await pool.execute('SELECT is_banned FROM users WHERE id = ?', [userId]);
+        if (userCheck.length > 0 && userCheck[0].is_banned) {
+            return res.status(403).json({ message: 'Twoje konto zostało zablokowane. Nie możesz składać zamówień.' });
+        }
 
         if (!items || items.length === 0) {
             return res.status(400).json({ message: 'Koszyk jest pusty' });
@@ -347,7 +436,7 @@ app.post('/api/orders/create', authenticateToken, async (req, res) => {
 app.get('/api/user/profile', authenticateToken, async (req, res) => {
     try {
         const [users] = await pool.execute(
-            'SELECT id, first_name, last_name, email, newsletter, created_at FROM users WHERE id = ?',
+            'SELECT id, first_name, last_name, email, role, newsletter, created_at FROM users WHERE id = ?',
             [req.user.userId]
         );
 
@@ -359,6 +448,68 @@ app.get('/api/user/profile', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('❌ Profile error:', error);
         res.status(500).json({ message: 'Wewnętrzny błąd serwera' });
+    }
+});
+
+// Endpointy administracyjne
+
+// Pobierz listę użytkowników (tylko admin)
+app.get('/api/admin/users', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const [users] = await pool.execute(`
+            SELECT 
+                id, first_name, last_name, email, role, is_banned, 
+                last_active, newsletter, created_at,
+                CASE 
+                    WHEN last_active >= NOW() - INTERVAL 5 MINUTE THEN true
+                    ELSE false
+                END as is_online
+            FROM users 
+            ORDER BY created_at DESC
+        `);
+
+        res.json(users);
+    } catch (error) {
+        console.error('❌ Admin users error:', error);
+        res.status(500).json({ message: 'Błąd serwera' });
+    }
+});
+
+// Zbanuj/odbanuj użytkownika
+app.post('/api/admin/users/:userId/ban', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { banned } = req.body;
+
+        await pool.execute(
+            'UPDATE users SET is_banned = ? WHERE id = ?',
+            [banned, userId]
+        );
+
+        res.json({ 
+            message: banned ? 'Użytkownik zbanowany' : 'Użytkownik odbanowany',
+            banned: banned
+        });
+    } catch (error) {
+        console.error('❌ Ban user error:', error);
+        res.status(500).json({ message: 'Błąd serwera' });
+    }
+});
+
+// Usuń użytkownika
+app.delete('/api/admin/users/:userId', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        await pool.execute('DELETE FROM users WHERE id = ?', [userId]);
+
+        res.json({ 
+            message: 'Użytkownik usunięty',
+            deleted: true
+        });
+    } catch (error) {
+        console.error('❌ Delete user error:', error);
+        res.status(500).json({ message: 'Błąd serwera' });
     }
 });
 
@@ -394,12 +545,17 @@ app.get('/register', (req, res) => {
     res.sendFile(path.join(__dirname, 'register.html'));
 });
 
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Serwer uruchomiony na porcie ${PORT}`);
     console.log(`🌐 Środowisko: ${process.env.NODE_ENV}`);
     console.log(`📧 Resend: ${process.env.RESEND_API_KEY ? 'OK' : 'BRAK API KEY'}`);
+    console.log(`🔐 JWT Secret: ${process.env.JWT_SECRET ? 'OK' : 'BRAK'}`);
     await testConnection();
     await initializeDatabaseOnStartup();
 });
