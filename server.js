@@ -112,7 +112,7 @@ async function initializeDatabaseOnStartup() {
                     last_name VARCHAR(100) NOT NULL,
                     email VARCHAR(255) UNIQUE NOT NULL,
                     password VARCHAR(255) NOT NULL,
-                    role ENUM('user', 'admin') DEFAULT 'user',
+                    role VARCHAR(10) DEFAULT 'user',
                     is_banned BOOLEAN DEFAULT FALSE,
                     last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     newsletter BOOLEAN DEFAULT FALSE,
@@ -135,9 +135,12 @@ async function initializeDatabaseOnStartup() {
             // Sprawdź czy kolumna role istnieje, jeśli nie - dodaj
             try {
                 await pool.execute('SELECT role FROM users LIMIT 1');
+                console.log('✅ Kolumna role już istnieje');
             } catch (error) {
                 console.log('🔄 Dodawanie kolumn administracyjnych do tabeli users...');
-                await pool.execute('ALTER TABLE users ADD COLUMN role ENUM("user", "admin") DEFAULT "user"');
+                
+                // Użyj VARCHAR zamiast ENUM dla lepszej kompatybilności
+                await pool.execute(`ALTER TABLE users ADD COLUMN role VARCHAR(10) DEFAULT 'user'`);
                 await pool.execute('ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT FALSE');
                 await pool.execute('ALTER TABLE users ADD COLUMN last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
                 console.log('✅ Kolumny dodane pomyślnie');
@@ -361,6 +364,7 @@ app.post('/api/auth/login', async (req, res) => {
             last_name: user.last_name,
             email: user.email,
             role: user.role,
+            is_banned: user.is_banned,
             newsletter: user.newsletter,
             created_at: user.created_at
         };
@@ -436,7 +440,7 @@ app.post('/api/orders/create', authenticateToken, async (req, res) => {
 app.get('/api/user/profile', authenticateToken, async (req, res) => {
     try {
         const [users] = await pool.execute(
-            'SELECT id, first_name, last_name, email, role, newsletter, created_at FROM users WHERE id = ?',
+            'SELECT id, first_name, last_name, email, role, is_banned, newsletter, created_at FROM users WHERE id = ?',
             [req.user.userId]
         );
 
